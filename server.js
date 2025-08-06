@@ -33,8 +33,8 @@ app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Configuración para servir archivos estáticos de React
-app.use(express.static(path.join(__dirname, 'client/build')));
+// Configuración para servir archivos estáticos del directorio public
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Variables para almacenar el token y el estado
 let loyverseToken = '';
