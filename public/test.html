@@ -33,6 +33,18 @@
         <div class="row">
             <div class="col-md-6">
                 <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5>Facturas de Loyverse</h5>
+                        <button id="cargarFacturasLoyverse" class="btn btn-sm btn-outline-primary">Cargar Facturas</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="loyverseFacturas" class="mt-3">
+                            <div class="alert alert-info">Haga clic en "Cargar Facturas" para ver las facturas de Loyverse</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
                     <div class="card-header">
                         <h5>Certificado Digital</h5>
                     </div>
@@ -361,6 +373,139 @@
             
             document.getElementById('filtroTipoLog').addEventListener('change', cargarLogs);
             document.getElementById('refreshLogs').addEventListener('click', cargarLogs);
+            
+            // Cargar facturas de Loyverse
+            document.getElementById('cargarFacturasLoyverse').addEventListener('click', async function() {
+                try {
+                    document.getElementById('loyverseFacturas').innerHTML = 
+                        '<div class="alert alert-info">Cargando facturas de Loyverse...</div>';
+                    
+                    const response = await fetch('/api/loyverse/facturas');
+                    const data = await response.json();
+                    
+                    if (!data.receipts || data.receipts.length === 0) {
+                        document.getElementById('loyverseFacturas').innerHTML = 
+                            '<div class="alert alert-warning">No se encontraron facturas en Loyverse</div>';
+                        return;
+                    }
+                    
+                    let html = `<div class="mb-3">Se encontraron ${data.receipts.length} facturas</div>`;
+                    html += '<div class="accordion" id="accordionLoyverse">';
+                    
+                    data.receipts.forEach((receipt, index) => {
+                        const receiptId = receipt.receipt_number || `receipt-${index}`;
+                        const customer = receipt.customer || {};
+                        const total = receipt.total_money || 0;
+                        const date = new Date(receipt.receipt_date || receipt.created_at).toLocaleString();
+                        
+                        html += `
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                            data-bs-target="#collapse-${receiptId}" aria-expanded="false">
+                                        <div class="d-flex justify-content-between w-100">
+                                            <span><strong>${receiptId}</strong> - ${date}</span>
+                                            <span class="ms-3">$${total.toFixed(2)}</span>
+                                        </div>
+                                    </button>
+                                </h2>
+                                <div id="collapse-${receiptId}" class="accordion-collapse collapse" data-bs-parent="#accordionLoyverse">
+                                    <div class="accordion-body">
+                                        <div class="mb-3">
+                                            <h6>Cliente</h6>
+                                            <ul class="list-unstyled">
+                                                <li><strong>Nombre:</strong> ${customer.name || 'No especificado'}</li>
+                                                <li><strong>Código:</strong> ${customer.customer_code || 'No especificado'}</li>
+                                                <li><strong>Email:</strong> ${customer.email || 'No especificado'}</li>
+                                                <li><strong>Teléfono:</strong> ${customer.phone_number || 'No especificado'}</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mb-3">
+                                            <h6>Detalles</h6>
+                                            <ul class="list-unstyled">
+                                                <li><strong>Subtotal:</strong> $${(receipt.total_money - receipt.total_tax).toFixed(2)}</li>
+                                                <li><strong>Impuestos:</strong> $${(receipt.total_tax || 0).toFixed(2)}</li>
+                                                <li><strong>Total:</strong> $${total.toFixed(2)}</li>
+                                            </ul>
+                                        </div>
+                                        <div>
+                                            <h6>Productos</h6>
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Producto</th>
+                                                        <th>Cantidad</th>
+                                                        <th>Precio</th>
+                                                        <th>Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${(receipt.line_items || []).map(item => `
+                                                        <tr>
+                                                            <td>${item.item_name}</td>
+                                                            <td>${item.quantity}</td>
+                                                            <td>$${item.price.toFixed(2)}</td>
+                                                            <td>$${item.total_money.toFixed(2)}</td>
+                                                        </tr>
+                                                    `).join('')}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="mt-3">
+                                            <button class="btn btn-sm btn-primary btn-procesar-loyverse" 
+                                                    data-receipt-id="${index}">Procesar en SRI</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                    
+                    document.getElementById('loyverseFacturas').innerHTML = html;
+                    
+                    // Agregar event listeners a los botones de procesar
+                    document.querySelectorAll('.btn-procesar-loyverse').forEach(btn => {
+                        btn.addEventListener('click', async function() {
+                            const receiptIndex = parseInt(this.getAttribute('data-receipt-id'));
+                            const receipt = data.receipts[receiptIndex];
+                            
+                            if (!receipt) {
+                                alert('Error: No se encontró la factura seleccionada');
+                                return;
+                            }
+                            
+                            if (confirm(`¿Desea procesar la factura ${receipt.receipt_number} en el SRI?`)) {
+                                try {
+                                    const response = await fetch('/api/loyverse/procesar', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({ receipt_id: receipt.id })
+                                    });
+                                    
+                                    const result = await response.json();
+                                    
+                                    if (result.success) {
+                                        alert(`Factura procesada correctamente. Clave de acceso: ${result.claveAcceso}`);
+                                        cargarComprobantes();
+                                    } else {
+                                        alert(`Error al procesar factura: ${result.message}`);
+                                    }
+                                } catch (error) {
+                                    alert(`Error al procesar factura: ${error.message}`);
+                                }
+                            }
+                        });
+                    });
+                    
+                } catch (error) {
+                    document.getElementById('loyverseFacturas').innerHTML = 
+                        `<div class="alert alert-danger">Error al cargar facturas de Loyverse: ${error.message}</div>`;
+                }
+            });
             
             // Cargar datos iniciales
             cargarComprobantes();
