@@ -1,0 +1,33 @@
+{
+  "name": "loyverse-sri-integration",
+  "version": "1.0.0",
+  "description": "Integración simple entre Loyverse y SRI Ecuador",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "client": "cd client && npm start",
+    "client-install": "cd client && npm install",
+    "build": "cd client && npm run build",
+    "dev-full": "concurrently \"npm run dev\" \"npm run client\""
+  },
+  "keywords": [
+    "loyverse",
+    "sri",
+    "facturacion",
+    "ecuador"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.1"
+  }
+}

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prueba de Integración Loyverse-SRI</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #0d6efd;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 200px;
+            font-family: monospace;
+        }
+        button {
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0b5ed7;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .success {
+            color: #198754;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Prueba de Integración Loyverse-SRI</h1>
+        
+        <div class="form-group">
+            <label for="loyverse-token">Token de Loyverse:</label>
+            <input type="text" id="loyverse-token" placeholder="Ingresa tu token de Loyverse">
+        </div>
+        
+        <div class="form-group">
+            <label for="receipt-data">Datos de Factura de Prueba (JSON):</label>
+            <textarea id="receipt-data">
+{
+  "receipt_number": "1001",
+  "created_at": "2025-08-05T14:30:00-05:00",
+  "customer_id": "c71758a2-79bf-11ea-bde9-1269e7c5a22d",
+  "customer": {
+    "id": "c71758a2-79bf-11ea-bde9-1269e7c5a22d",
+    "name": "Cliente de Prueba",
+    "address": "Dirección de Prueba",
+    "email": "cliente@ejemplo.com",
+    "phone_number": "0987654321",
+    "customer_code": "1234567890001",
+    "note": "RUC: 1234567890001 - Cliente Corporativo"
+  },
+  "line_items": [
+    {
+      "item_name": "Producto 1",
+      "item_code": "P001",
+      "variant_id": "V001",
+      "quantity": 2,
+      "price": 10.50,
+      "discount_amount": 1.00,
+      "net_total": 20.00,
+      "tax_amount": 2.40
+    },
+    {
+      "item_name": "Producto 2",
+      "item_code": "P002",
+      "variant_id": "V002",
+      "quantity": 1,
+      "price": 15.00,
+      "discount_amount": 0.00,
+      "net_total": 15.00,
+      "tax_amount": 1.80
+    }
+  ],
+  "total_money": {
+    "net_sales": 35.00,
+    "discount": 1.00,
+    "gross_sales": 39.20
+  }
+}
+            </textarea>
+        </div>
+        
+        <button id="test-button">Probar Conversión</button>
+        
+        <div class="result" id="result">Los resultados aparecerán aquí...</div>
+    </div>
+
+    <script>
+        document.getElementById('test-button').addEventListener('click', function() {
+            const loyverseToken = document.getElementById('loyverse-token').value;
+            let receiptData;
+            
+            try {
+                receiptData = JSON.parse(document.getElementById('receipt-data').value);
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<span class="error">Error al analizar JSON: ${error.message}</span>`;
+                return;
+            }
+            
+            /**
+             * Determina el tipo de identificación según el formato del número
+             */
+            function determinarTipoIdentificacion(identificacion) {
+                if (!identificacion || identificacion === "9999999999") {
+                    return "07"; // Consumidor final
+                }
+                
+                // Limpiar posibles espacios o caracteres no numéricos
+                const numeroLimpio = identificacion.replace(/[^0-9]/g, '');
+                
+                if (numeroLimpio.length === 13) {
+                    return "04"; // RUC
+                } else if (numeroLimpio.length === 10) {
+                    return "05"; // Cédula
+                } else {
+                    return "06"; // Pasaporte u otro
+                }
+            }
+
+            /**
+             * Extrae la identificación fiscal del cliente desde diferentes campos
+             */
+            function extraerIdentificacionCliente(customer) {
+                if (!customer) return "9999999999";
+                
+                // Opción 1: Buscar en customer_code
+                if (customer.customer_code && customer.customer_code.trim() !== "") {
+                    // Si el customer_code parece ser un RUC o cédula (solo números)
+                    if (/^\d{10,13}$/.test(customer.customer_code.replace(/[^0-9]/g, ''))) {
+                        return customer.customer_code.replace(/[^0-9]/g, '');
+                    }
+                }
+                
+                // Opción 2: Buscar en note con formato "RUC: XXXX" o "CEDULA: XXXX"
+                if (customer.note) {
+                    // Buscar patrones como "RUC: 1234567890001" o "CEDULA: 1234567890"
+                    const rucMatch = customer.note.match(/RUC:?\s*(\d{10,13})/i);
+                    if (rucMatch) return rucMatch[1];
+                    
+                    const cedulaMatch = customer.note.match(/CEDULA:?\s*(\d{10})/i);
+                    if (cedulaMatch) return cedulaMatch[1];
+                    
+                    // Buscar cualquier secuencia de 10 o 13 dígitos en las notas
+                    const numeroMatch = customer.note.match(/(\d{10,13})/);
+                    if (numeroMatch) return numeroMatch[1];
+                }
+                
+                // Si no se encuentra, retornar consumidor final
+                return "9999999999";
+            }
+
+            // Función para formatear el recibo para SRI
+            function formatReceiptForSRI(receipt) {
+                // Extraer información del cliente
+                const customer = receipt.customer || {};
+                
+                // Extraer identificación fiscal del cliente
+                const identificacion = extraerIdentificacionCliente(customer);
+                
+                // Determinar tipo de identificación
+                const tipoIdentificacion = determinarTipoIdentificacion(identificacion);
+                
+                // Formatear items
+                const items = receipt.line_items.map(item => ({
+                    cantidad: item.quantity,
+                    codigo_principal: item.item_code || item.variant_id,
+                    descripcion: item.item_name,
+                    precio_unitario: item.price,
+                    descuento: item.discount_amount || 0,
+                    precio_total_sin_impuestos: item.net_total,
+                    impuestos: [{
+                        codigo: "2", // IVA
+                        codigo_porcentaje: "2", // 12%
+                        base_imponible: item.net_total,
+                        valor: item.tax_amount || 0
+                    }]
+                }));
+
+                // Crear objeto de factura para SRI
+                return {
+                    ambiente: "1", // 1: Pruebas, 2: Producción
+                    tipo_emision: "1", // 1: Normal
+                    razon_social: "EMPRESA DEMO", // Reemplazar con datos reales
+                    nombre_comercial: "EMPRESA DEMO", // Reemplazar con datos reales
+                    ruc: "9999999999001", // Reemplazar con RUC real
+                    clave_acceso: "", // Se generará automáticamente
+                    codigo_documento: "01", // 01: Factura
+                    establecimiento: "001", // Reemplazar con datos reales
+                    punto_emision: "001", // Reemplazar con datos reales
+                    secuencial: receipt.receipt_number.replace(/\D/g, '').padStart(9, '0').substring(0, 9),
+                    fecha_emision: new Date(receipt.created_at).toISOString().split('T')[0],
+                    fecha_expiracion: "", // Opcional
+                    direccion_establecimiento: "Dirección de la empresa", // Reemplazar con datos reales
+                    total_sin_impuestos: receipt.total_money.net_sales,
+                    total_descuento: receipt.total_money.discount,
+                    propina: 0,
+                    importe_total: receipt.total_money.gross_sales,
+                    moneda: "DOLAR",
+                    cliente: {
+                        razon_social: customer.name || "CONSUMIDOR FINAL",
+                        identificacion: identificacion,
+                        tipo_identificacion: tipoIdentificacion,
+                        direccion: customer.address || "",
+                        email: customer.email || "",
+                        telefono: customer.phone_number || ""
+                    },
+                    items: items,
+                    pagos: [
+                        {
+                            forma_pago: "01", // 01: Sin utilización del sistema financiero
+                            total: receipt.total_money.gross_sales,
+                            plazo: "0",
+                            unidad_tiempo: "dias"
+                        }
+                    ]
+                };
+            }
+            
+            try {
+                const sriData = formatReceiptForSRI(receiptData);
+                document.getElementById('result').innerHTML = `<span class="success">Conversión exitosa:</span>\n\n${JSON.stringify(sriData, null, 2)}`;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<span class="error">Error en la conversión: ${error.message}</span>`;
+            }
+        });
+    </script>
+</body>
+</html>
