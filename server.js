@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment');
+const cron = require('node-cron');
 
 // Crear directorios necesarios si no existen
 const directorios = ['certificados', 'comprobantes', 'logs', 'comprobantes/recibidos', 'comprobantes/autorizados'];
