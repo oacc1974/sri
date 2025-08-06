@@ -198,8 +198,8 @@ app.post('/api/factura', async (req, res) => {
     logger.info('Iniciando generación de factura de prueba', { datosFactura });
     
     // Generar XML
-    const { generateXml } = require('./xml-generator');
-    const xmlContent = await generateXml(datosFactura);
+    const { generarXmlFactura } = require('./xml-generator');
+    const xmlContent = await generarXmlFactura(datosFactura);
     
     // Firmar XML
     const { signXml } = require('./xml-signer');
