@@ -185,7 +185,7 @@ app.get('/api/certificado/verificar', async (req, res) => {
 // Ruta para generar y procesar una factura de prueba
 app.post('/api/factura', async (req, res) => {
   try {
-    const datosFactura = req.body;
+    let datosFactura = req.body;
     
     // Validar datos mínimos requeridos
     if (!datosFactura || !datosFactura.cliente || !datosFactura.factura) {
