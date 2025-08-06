@@ -1,3 +1,16 @@
+// Añadir al inicio de server.js
+const fs = require('fs');
+const path = require('path');
+
+// Crear directorios necesarios si no existen
+const directorios = ['certificados', 'comprobantes', 'logs', 'comprobantes/recibidos', 'comprobantes/autorizados'];
+directorios.forEach(dir => {
+  const dirPath = path.join(__dirname, dir);
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+    console.log(`Directorio creado: ${dirPath}`);
+  }
+});
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
