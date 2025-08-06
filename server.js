@@ -1,6 +1,11 @@
-// Añadir al inicio de server.js
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
+const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
+const moment = require('moment');
 
 // Crear directorios necesarios si no existen
 const directorios = ['certificados', 'comprobantes', 'logs', 'comprobantes/recibidos', 'comprobantes/autorizados'];
@@ -11,14 +16,6 @@ directorios.forEach(dir => {
     console.log(`Directorio creado: ${dirPath}`);
   }
 });
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const axios = require('axios');
-const bodyParser = require('body-parser');
-const fs = require('fs');
-const path = require('path');
-const moment = require('moment');
 const { 
   getLoyverseReceipts, 
   getLoyverseCustomer, 
