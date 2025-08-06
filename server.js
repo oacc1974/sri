@@ -195,6 +195,106 @@ app.post('/api/factura', async (req, res) => {
       });
     }
     
+    // Sanitizar y preparar datos para generación de XML
+    try {
+      // Datos básicos
+      const facturaPreparada = {
+        fechaEmision: datosFactura.factura.fechaEmision || new Date().toISOString().split('T')[0],
+        ruc: process.env.RUC || '0920069853001',
+        ambiente: process.env.SRI_AMBIENTE || '1',
+        establecimiento: process.env.ESTABLECIMIENTO || '001',
+        puntoEmision: process.env.PUNTO_EMISION || '001',
+        secuencial: datosFactura.factura.secuencial || '000000001',
+        tipoEmision: '1',
+        razonSocial: process.env.RAZON_SOCIAL || 'EMPRESA DE PRUEBA S.A.',
+        nombreComercial: process.env.NOMBRE_COMERCIAL || 'EMPRESA DE PRUEBA',
+        dirMatriz: process.env.DIR_MATRIZ || 'Av. Amazonas N36-152',
+        dirEstablecimiento: process.env.DIR_ESTABLECIMIENTO || 'Av. Amazonas N36-152',
+        obligadoContabilidad: process.env.OBLIGADO_CONTABILIDAD || 'SI',
+        // Datos del cliente
+        cliente: {
+          tipoIdentificacion: datosFactura.cliente.tipoIdentificacion || '05',
+          identificacion: datosFactura.cliente.identificacion || '9999999999',
+          razonSocial: datosFactura.cliente.razonSocial || 'CONSUMIDOR FINAL',
+          direccion: datosFactura.cliente.direccion || 'N/A',
+          email: datosFactura.cliente.email || '',
+          telefono: datosFactura.cliente.telefono || ''
+        },
+        // Totales
+        totalSinImpuestos: parseFloat(datosFactura.factura.totalSinImpuestos || 0),
+        totalDescuento: parseFloat(datosFactura.factura.totalDescuento || 0),
+        totalConImpuestos: parseFloat(datosFactura.factura.totalConImpuestos || 0),
+        propina: parseFloat(datosFactura.factura.propina || 0),
+        importeTotal: parseFloat(datosFactura.factura.importeTotal || 0),
+        moneda: 'DOLAR',
+        // Items y pagos
+        items: [],
+        pagos: []
+      };
+      
+      // Procesar items
+      if (Array.isArray(datosFactura.factura.items)) {
+        facturaPreparada.items = datosFactura.factura.items.map(item => ({
+          codigoPrincipal: item.codigoPrincipal || 'SIN CODIGO',
+          descripcion: item.descripcion || 'Producto/Servicio',
+          cantidad: parseFloat(item.cantidad || 1),
+          precioUnitario: parseFloat(item.precioUnitario || 0),
+          descuento: parseFloat(item.descuento || 0),
+          precioTotalSinImpuestos: parseFloat(item.precioTotalSinImpuestos || 0),
+          impuestos: Array.isArray(item.impuestos) ? item.impuestos.map(imp => ({
+            codigo: imp.codigo || '2',
+            codigoPorcentaje: imp.codigoPorcentaje || '2',
+            baseImponible: parseFloat(imp.baseImponible || 0),
+            valor: parseFloat(imp.valor || 0)
+          })) : [{
+            codigo: '2',
+            codigoPorcentaje: '2',
+            baseImponible: parseFloat(item.precioTotalSinImpuestos || 0),
+            valor: parseFloat(item.precioTotalSinImpuestos || 0) * 0.12
+          }]
+        }));
+      } else {
+        // Crear al menos un item por defecto
+        facturaPreparada.items = [{
+          codigoPrincipal: 'SIN CODIGO',
+          descripcion: 'Producto/Servicio por defecto',
+          cantidad: 1,
+          precioUnitario: parseFloat(datosFactura.factura.importeTotal || 0),
+          descuento: 0,
+          precioTotalSinImpuestos: parseFloat(datosFactura.factura.importeTotal || 0),
+          impuestos: [{
+            codigo: '2',
+            codigoPorcentaje: '2',
+            baseImponible: parseFloat(datosFactura.factura.importeTotal || 0),
+            valor: parseFloat(datosFactura.factura.importeTotal || 0) * 0.12
+          }]
+        }];
+      }
+      
+      // Procesar pagos
+      if (Array.isArray(datosFactura.factura.pagos)) {
+        facturaPreparada.pagos = datosFactura.factura.pagos.map(pago => ({
+          formaPago: pago.formaPago || '01',
+          total: parseFloat(pago.total || 0)
+        }));
+      } else {
+        // Crear al menos un pago por defecto
+        facturaPreparada.pagos = [{
+          formaPago: '01',
+          total: parseFloat(datosFactura.factura.importeTotal || 0)
+        }];
+      }
+      
+      // Reemplazar datos originales con datos sanitizados
+      datosFactura = facturaPreparada;
+    } catch (error) {
+      logger.error('Error sanitizando datos de factura', { error: error.message, stack: error.stack });
+      return res.status(400).json({
+        success: false,
+        message: `Error preparando datos de factura: ${error.message}`
+      });
+    }
+    
     logger.info('Iniciando generación de factura de prueba', { datosFactura });
     
     // Generar XML
