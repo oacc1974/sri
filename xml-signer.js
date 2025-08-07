@@ -512,8 +512,28 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     
     // Configurar la clave de firma usando la clave privada en formato PEM
     try {
+      // Asegurarse de que la clave privada esté en el formato correcto
+      if (!privateKeyPem || !privateKeyPem.includes('-----BEGIN PRIVATE KEY-----')) {
+        console.error('La clave privada no está en formato PEM válido');
+        console.log('Intentando reformatear la clave privada...');
+        
+        // Intentar reformatear la clave si es necesario
+        if (info.privateKey) {
+          privateKeyPem = forge.pki.privateKeyToPem(info.privateKey);
+          console.log('Clave privada reformateada correctamente');
+        } else {
+          throw new Error('No se pudo obtener la clave privada del certificado');
+        }
+      }
+      
+      // Asignar la clave privada al objeto SignedXml
       sig.signingKey = privateKeyPem;
       console.log('Clave privada configurada correctamente');
+      
+      // Verificación adicional
+      if (!sig.signingKey) {
+        throw new Error('La clave de firma no se configuró correctamente');
+      }
     } catch (error) {
       console.error('Error al configurar la clave privada:', error);
       throw new Error(`Error al configurar la clave privada: ${error.message}`);
