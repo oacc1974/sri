@@ -322,23 +322,17 @@
         
         // Función para cargar facturas reales de Loyverse
         document.getElementById('test-loyverse-button').addEventListener('click', async function() {
-            const loyverseToken = document.getElementById('loyverse-token').value;
-            
-            if (!loyverseToken) {
-                document.getElementById('result').innerHTML = `<span class="error">Por favor ingresa un token de Loyverse válido</span>`;
-                return;
-            }
+            // Usar el token configurado en el servidor en lugar de pedirlo al usuario
+            document.getElementById('result').innerHTML = `<span>Cargando facturas de Loyverse usando token del servidor...</span>`;
+
             
             try {
                 // Mostrar mensaje de espera
                 document.getElementById('result').innerHTML = `<span>Cargando facturas de Loyverse...</span>`;
                 
-                // Llamar al endpoint para obtener facturas de Loyverse
+                // Llamar al endpoint para obtener facturas de Loyverse usando el token del servidor
                 const response = await fetch('/api/loyverse/facturas', {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${loyverseToken}`
-                    }
+                    method: 'GET'
                 });
                 
                 const result = await response.json();
@@ -365,13 +359,37 @@
                             <tbody>
                     `;
                     
+                    // Agregar depuración para ver la estructura completa de la primera factura
+                    if (loyverseReceipts.length > 0) {
+                        console.log('Estructura de la primera factura:', JSON.stringify(loyverseReceipts[0], null, 2));
+                    }
+                    
                     loyverseReceipts.forEach((receipt, index) => {
                         const customer = receipt.customer ? receipt.customer.name : 'Consumidor Final';
-                        // Manejo seguro de valores nulos o indefinidos en total_money y gross_sales
-                        const total = receipt.total_money && receipt.total_money.gross_sales !== undefined ? 
-                            receipt.total_money.gross_sales : 
-                            (receipt.total_money && receipt.total_money.total !== undefined ? 
-                                receipt.total_money.total : 0);
+                        
+                        // Depuración para ver todos los posibles campos de total
+                        console.log(`Factura ${index} - Campos de total:`, {
+                            total_money: receipt.total_money,
+                            total: receipt.total,
+                            receipt_total: receipt.receipt_total,
+                            total_tax: receipt.total_tax,
+                            total_amount: receipt.total_amount
+                        });
+                        
+                        // Intentar extraer el total de diferentes ubicaciones posibles
+                        let total = 0;
+                        if (receipt.total_money && typeof receipt.total_money.gross_sales === 'number') {
+                            total = receipt.total_money.gross_sales;
+                        } else if (receipt.total_money && typeof receipt.total_money.total === 'number') {
+                            total = receipt.total_money.total;
+                        } else if (typeof receipt.total === 'number') {
+                            total = receipt.total;
+                        } else if (typeof receipt.receipt_total === 'number') {
+                            total = receipt.receipt_total;
+                        } else if (typeof receipt.total_amount === 'number') {
+                            total = receipt.total_amount;
+                        }
+                        
                         const fecha = new Date(receipt.created_at).toLocaleString();
                         
                         tableHtml += `
