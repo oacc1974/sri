@@ -125,7 +125,7 @@ function generarXmlFactura(factura) {
   xmlString += `<estab>${factura.establecimiento}</estab>\n`;
   xmlString += `<ptoEmi>${factura.puntoEmision}</ptoEmi>\n`;
   xmlString += `<secuencial>${factura.secuencial.toString().padStart(9, '0')}</secuencial>\n`;
-  xmlString += `<dirMatriz>${direccionEstablecimiento}</dirMatriz>\n`;
+  xmlString += `<dirMatriz>${sanitizarTextoXML(factura.dirMatriz)}</dirMatriz>\n`;
   xmlString += '</infoTributaria>\n';
   
   // infoFactura
@@ -136,7 +136,6 @@ function generarXmlFactura(factura) {
   xmlString += `<tipoIdentificacionComprador>${factura.cliente.tipoIdentificacion}</tipoIdentificacionComprador>\n`;
   xmlString += `<razonSocialComprador>${razonSocialComprador}</razonSocialComprador>\n`;
   xmlString += `<identificacionComprador>${factura.cliente.identificacion}</identificacionComprador>\n`;
-  xmlString += `<direccionComprador>${direccionComprador}</direccionComprador>\n`;
   xmlString += `<totalSinImpuestos>${factura.totalSinImpuestos.toFixed(2)}</totalSinImpuestos>\n`;
   xmlString += `<totalDescuento>${factura.totalDescuento.toFixed(2)}</totalDescuento>\n`;
   
@@ -162,8 +161,6 @@ function generarXmlFactura(factura) {
     xmlString += '<pago>\n';
     xmlString += `<formaPago>${pago.formaPago}</formaPago>\n`;
     xmlString += `<total>${pago.total.toFixed(2)}</total>\n`;
-    xmlString += `<plazo>${pago.plazo}</plazo>\n`;
-    xmlString += `<unidadTiempo>${pago.unidadTiempo}</unidadTiempo>\n`;
     xmlString += '</pago>\n';
   });
   xmlString += '</pagos>\n';
@@ -204,10 +201,10 @@ function generarXmlFactura(factura) {
   if (email || telefono) {
     xmlString += '<infoAdicional>\n';
     if (email) {
-      xmlString += `<campoAdicional nombre="email">${email}</campoAdicional>\n`;
+      xmlString += `<campoAdicional nombre="Email">${email}</campoAdicional>\n`;
     }
     if (telefono) {
-      xmlString += `<campoAdicional nombre="telefono">${telefono}</campoAdicional>\n`;
+      xmlString += `<campoAdicional nombre="Teléfono">${telefono}</campoAdicional>\n`;
     }
     xmlString += '</infoAdicional>\n';
   }
@@ -221,7 +218,6 @@ function generarXmlFactura(factura) {
   } catch (error) {
     throw new Error(`Error al generar el XML de la factura: ${error.message}`);
   }
-}
 }
 
 /**
