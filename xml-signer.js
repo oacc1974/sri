@@ -649,9 +649,13 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // Firmar el documento
     try {
       console.log('Iniciando proceso de firma del XML...');
-      // Colocar la firma al final del nodo con Id="comprobante" (normalmente el raíz)
+      // Colocar la firma SIEMPRE al final del nodo raíz <factura> como requiere el SRI
       sig.computeSignature(xmlString, {
-        location: { reference: "//*[@Id='comprobante']", action: "append" }
+        location: {
+          reference: "/*[local-name()='factura']",  // Selector XPath específico para el nodo raíz factura
+          action: "append"   // Agregar como ÚLTIMO hijo de <factura>
+        },
+        prefix: "ds"          // Usar prefijo ds: para la firma (<ds:Signature>)
       });
       console.log('XML firmado correctamente');
       
