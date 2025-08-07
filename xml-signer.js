@@ -504,10 +504,24 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     const rootNodeName = doc.documentElement.nodeName;
     console.log(`Nodo raíz para firmar: ${rootNodeName}`);
 
+    // Definir constantes para los algoritmos (parche universal)
+    const C14N = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
+    const DIGEST = 'http://www.w3.org/2001/04/xmlenc#sha256';
+    const SIGALG = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
+    const TRANSFORM = 'http://www.w3.org/2000/09/xmldsig#enveloped-signature';
+    
+    // Loggear versión de xml-crypto para depuración
+    try {
+      const xmlCryptoVersion = require('xml-crypto/package.json').version;
+      console.log(`Versión de xml-crypto: ${xmlCryptoVersion}`);
+    } catch (e) {
+      console.log('No se pudo determinar la versión de xml-crypto');
+    }
+    
     // Configurar la firma con los algoritmos requeridos por el SRI
     const sig = new SignedXml({
-      canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
-      signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256'
+      canonicalizationAlgorithm: C14N,
+      signatureAlgorithm: SIGALG
     });
     
     // MUY importante en xml-crypto para que reconozca Id/ID/id
@@ -516,19 +530,26 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // Configurar la referencia al nodo que se va a firmar
     // SIEMPRE especificar el digestAlgorithm para evitar el error "digestAlgorithm is required"
     
-    // Selecciona el nodo a firmar: factura con Id/comprobante
-    const xpath = "//*[local-name(.)='factura' and (@Id='comprobante' or @id='comprobante')]";
+    // Verificar si el documento tiene el atributo Id="comprobante" en el nodo raíz
+    // Si no lo tiene, lo agregamos para cumplir con el estándar SRI
+    const rootNode = doc.documentElement;
+    if (!rootNode.hasAttribute('Id') && !rootNode.hasAttribute('id')) {
+      rootNode.setAttribute('Id', 'comprobante');
+      console.log(`Se agregó el atributo Id="comprobante" al nodo raíz ${rootNodeName}`);
+    }
     
-    // Si no es factura, usar el nodo raíz
-    const xpathToUse = rootNodeName.toLowerCase() === 'factura' ? xpath : `//*[local-name(.)='${rootNodeName}']`;
+    // Usar referencia por Id (más compatible con SRI)
+    console.log('Configurando referencia por Id="comprobante" para SRI');
     
-    // Agregar la referencia con el digestAlgorithm explícito
+    // Agregar la referencia con el digestAlgorithm explícito (API clásica posicional)
     sig.addReference(
-      xpathToUse,
-      [
-        'http://www.w3.org/2000/09/xmldsig#enveloped-signature'
-      ],
-      'http://www.w3.org/2001/04/xmlenc#sha256'  // Digest algorithm SIEMPRE especificado
+      "//*[@Id='comprobante']",
+      [TRANSFORM, C14N],
+      DIGEST,          // digestAlgorithm - REQUERIDO
+      '',              // id (opcional)
+      '',              // type (opcional)
+      '#comprobante',  // URI explícita para SRI
+      true             // forceUri
     );
     
     // Asignar la clave privada en formato PEM completo (con headers)
@@ -540,7 +561,6 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       .replace('-----BEGIN CERTIFICATE-----', '')
       .replace('-----END CERTIFICATE-----', '')
       .replace(/\r?\n|\r/g, '');
-    
     // Configurar la información del certificado
     sig.keyInfoProvider = {
       getKeyInfo: () => `<X509Data><X509Certificate>${x509Clean}</X509Certificate></X509Data>`
@@ -549,9 +569,9 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // Firmar el documento
     try {
       console.log('Iniciando proceso de firma del XML...');
-      // Colocar la firma al final de la factura (o nodo raíz)
+      // Colocar la firma al final del nodo con Id="comprobante" (normalmente el raíz)
       sig.computeSignature(xmlString, {
-        location: { reference: `//*[local-name(.)='${rootNodeName}']`, action: "append" }
+        location: { reference: "//*[@Id='comprobante']", action: "append" }
       });
       console.log('XML firmado correctamente');
       
