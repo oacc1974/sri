@@ -19,6 +19,7 @@ directorios.forEach(dir => {
 });
 const { 
   getLoyverseReceipts, 
+  getLoyverseReceiptById,
   getLoyverseCustomer, 
   createSRIInvoice,
   verificarEstadoComprobante 
@@ -184,15 +185,25 @@ app.post('/api/loyverse/procesar', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Token de Loyverse no configurado' });
     }
     
-    // Obtener todos los recibos recientes
-    const startTime = new Date();
-    startTime.setDate(startTime.getDate() - 30);
-    const startTimeISO = startTime.toISOString();
-    
-    const receipts = await getLoyverseReceipts(token, startTimeISO);
-    
-    // Encontrar el recibo específico
-    const receipt = receipts.find(r => r.id === receipt_id);
+    // Intentar obtener el recibo directamente por su ID
+    let receipt = null;
+    try {
+      // Obtener el recibo directamente por su ID
+      const receiptData = await getLoyverseReceiptById(token, receipt_id);
+      if (receiptData) {
+        receipt = receiptData;
+      }
+    } catch (idError) {
+      logger.warn(`No se pudo obtener el recibo por ID, intentando buscar en lista: ${idError.message}`);
+      
+      // Si falla, intentar buscarlo en la lista de recibos recientes
+      const startTime = new Date();
+      startTime.setDate(startTime.getDate() - 30);
+      const startTimeISO = startTime.toISOString();
+      
+      const receipts = await getLoyverseReceipts(token, startTimeISO);
+      receipt = receipts.find(r => r.id === receipt_id);
+    }
     
     if (!receipt) {
       return res.status(404).json({ success: false, message: 'Recibo no encontrado' });

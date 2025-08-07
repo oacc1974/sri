@@ -37,6 +37,28 @@ async function getLoyverseReceipts(token, startTime) {
 }
 
 /**
+ * Obtiene un recibo específico de Loyverse por su ID
+ * @param {string} token - Token de API de Loyverse
+ * @param {string} receiptId - ID del recibo
+ * @returns {Promise<Object>} - Datos del recibo
+ */
+async function getLoyverseReceiptById(token, receiptId) {
+  try {
+    const response = await axios.get(`https://api.loyverse.com/v1.0/receipts/${receiptId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    return response.data || null;
+  } catch (error) {
+    console.error('Error obteniendo recibo de Loyverse por ID:', error.response?.data || error.message);
+    throw new Error(`Error obteniendo recibo de Loyverse por ID: ${error.response?.data?.message || error.message}`);
+  }
+}
+
+/**
  * Obtiene los datos completos de un cliente de Loyverse
  * @param {string} token - Token de API de Loyverse
  * @param {string} customerId - ID del cliente
@@ -305,6 +327,7 @@ async function verificarEstadoComprobante(claveAcceso) {
 
 module.exports = {
   getLoyverseReceipts,
+  getLoyverseReceiptById,
   getLoyverseCustomer,
   formatReceiptForSRI,
   createSRIInvoice,
