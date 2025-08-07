@@ -63,22 +63,47 @@ function extraerInfoCertificado(certificatePath, certificatePassword) {
     let ruc = null;
     let nombreTitular = null;
     
+    console.log('Extrayendo información del certificado...');
+    
+    // Imprimir todos los campos del sujeto para depuración
+    const attrs = certificate.subject.attributes;
+    console.log('Campos disponibles en el certificado:');
+    attrs.forEach(attr => {
+      console.log(`- ${attr.name || attr.type}: ${attr.value}`);
+    });
+    
     // Buscar RUC en varios campos posibles
-    const camposRuc = ['serialNumber', 'UID', 'OID.2.5.4.45'];
+    // En certificados ecuatorianos, el RUC suele estar en serialNumber con formato "RUC:0920069853001"
+    // o en UID o en OID.2.5.4.45
+    const camposRuc = ['serialNumber', 'UID', 'OID.2.5.4.45', '2.5.4.45'];
     for (const campo of camposRuc) {
       const field = certificate.subject.getField(campo);
       if (field) {
-        ruc = field.value;
-        break;
+        let valor = field.value;
+        console.log(`Campo ${campo} encontrado con valor: ${valor}`);
+        
+        // Si el valor contiene "RUC:", extraer solo el número
+        if (typeof valor === 'string' && valor.includes('RUC:')) {
+          valor = valor.split('RUC:')[1].trim();
+        }
+        
+        // Verificar si parece un RUC ecuatoriano (13 dígitos)
+        if (typeof valor === 'string' && /^\d{10,13}$/.test(valor.replace(/\D/g, ''))) {
+          ruc = valor.replace(/\D/g, '');
+          console.log(`RUC extraído: ${ruc}`);
+          break;
+        }
       }
     }
     
-    // Buscar nombre del titular
-    const camposNombre = ['CN', 'O', 'OU', 'name'];
+    // Buscar nombre del titular (priorizar CN para persona natural, O para organización)
+    // El nombre del titular debe ser el sujeto principal del certificado
+    const camposNombre = ['CN', 'O', 'OU', 'name', 'givenName', 'surname'];
     for (const campo of camposNombre) {
       const field = certificate.subject.getField(campo);
       if (field) {
         nombreTitular = field.value;
+        console.log(`Nombre encontrado en campo ${campo}: ${nombreTitular}`);
         break;
       }
     }
