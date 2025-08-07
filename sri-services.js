@@ -292,16 +292,17 @@ async function guardarComprobanteXml(xmlContent, claveAcceso, estado) {
 /**
  * Proceso completo de envío y autorización de un comprobante
  * @param {string} xmlContent - Contenido del XML sin firmar
- * @param {string} certificatePath - Ruta al certificado .p12
+ * @param {string} certificatePath - Ruta al certificado .p12 o 'CERT_P12_BASE64' si se usa variable de entorno
  * @param {string} certificatePassword - Contraseña del certificado
  * @param {string} ambiente - Ambiente SRI ('1' para pruebas, '2' para producción)
+ * @param {boolean} usarBase64 - Si se debe usar la variable de entorno CERT_P12_BASE64 en lugar de un archivo
  * @param {Object} options - Opciones adicionales
  * @param {number} options.maxReintentos - Número máximo de reintentos (por defecto 3)
  * @param {number} options.tiempoEsperaMs - Tiempo de espera entre reintentos en ms (por defecto 3000)
  * @param {boolean} options.guardarXml - Si se debe guardar el XML en el sistema de archivos (por defecto true)
  * @returns {Promise<Object>} - Resultado del proceso completo
  */
-async function procesarComprobante(xmlContent, certificatePath, certificatePassword, ambiente, options = {}) {
+async function procesarComprobante(xmlContent, certificatePath, certificatePassword, ambiente, usarBase64 = false, options = {}) {
   const {
     maxReintentos = 3,
     tiempoEsperaMs = 3000,
@@ -323,7 +324,15 @@ async function procesarComprobante(xmlContent, certificatePath, certificatePassw
     const { signXml, verificarCertificado } = require('./xml-signer');
     
     // Verificar el certificado
-    const verificacion = verificarCertificado(certificatePath, certificatePassword);
+    let verificacion;
+    if (usarBase64) {
+      logger.info('Verificando certificado desde variable de entorno base64');
+      verificacion = verificarCertificado('CERT_P12_BASE64', certificatePassword, true);
+    } else {
+      logger.info(`Verificando certificado desde archivo: ${certificatePath}`);
+      verificacion = verificarCertificado(certificatePath, certificatePassword);
+    }
+    
     if (!verificacion.valido) {
       return {
         success: false,
@@ -334,8 +343,8 @@ async function procesarComprobante(xmlContent, certificatePath, certificatePassw
     }
     
     // Firmar el XML
-    console.log(`Firmando el XML para comprobante con clave: ${claveAcceso.substring(0, 10)}...${claveAcceso.substring(40)}`);
-    xmlSigned = await signXml(xmlContent, certificatePath, certificatePassword);
+    logger.info(`Firmando el XML para comprobante con clave: ${claveAcceso.substring(0, 10)}...${claveAcceso.substring(40)}`);
+    xmlSigned = await signXml(xmlContent, certificatePath, certificatePassword, usarBase64);
     
     // Guardar el XML firmado si está habilitado
     if (guardarXml) {

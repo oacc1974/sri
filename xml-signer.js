@@ -12,18 +12,27 @@ const path = require('path');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const { loadCertificate } = require('./cert-utils');
 
 /**
  * Extrae información del certificado digital
- * @param {string} certificatePath - Ruta al archivo del certificado .p12
+ * @param {string} certificatePath - Ruta al archivo del certificado .p12 o nombre de variable de entorno
  * @param {string} certificatePassword - Contraseña del certificado
+ * @param {boolean} isBase64Env - Si es true, certificatePath es el nombre de la variable de entorno con el certificado en base64
  * @returns {Object} - Información del certificado
  */
-function extraerInfoCertificado(certificatePath, certificatePassword) {
+function extraerInfoCertificado(certificatePath, certificatePassword, isBase64Env = false) {
   try {
-    // Verificar que el certificado existe
+    // Usar la utilidad para cargar el certificado (desde archivo o variable de entorno)
+    const certInfo = loadCertificate(certificatePath, isBase64Env);
+    certificatePath = certInfo.path;
+    
+    console.log(`Certificado cargado correctamente desde: ${certInfo.method}`);
+    console.log(`Ruta del certificado: ${certificatePath}`);
+    
+    // Verificar que el certificado existe (debería existir si loadCertificate no lanzó error)
     if (!fs.existsSync(certificatePath)) {
-      throw new Error(`Certificado no encontrado en: ${certificatePath}`);
+      throw new Error(`Certificado no encontrado en: ${certificatePath} (esto no debería ocurrir)`);  
     }
 
     // Leer el certificado
@@ -304,14 +313,15 @@ function extraerInfoCertificado(certificatePath, certificatePassword) {
 
 /**
  * Verifica si un certificado es válido (no expirado) y extrae información detallada
- * @param {string} certificatePath - Ruta al archivo del certificado .p12
+ * @param {string} certificatePath - Ruta al archivo del certificado .p12 o nombre de variable de entorno
  * @param {string} certificatePassword - Contraseña del certificado
+ * @param {boolean} isBase64Env - Si es true, certificatePath es el nombre de la variable de entorno con el certificado en base64
  * @returns {Object} - Resultado de la validación con información detallada
  */
-async function verificarCertificado(certificatePath, certificatePassword) {
+function verificarCertificado(certificatePath, certificatePassword, isBase64Env = false) {
   try {
     // Extraer información detallada del certificado
-    const info = extraerInfoCertificado(certificatePath, certificatePassword);
+    const info = extraerInfoCertificado(certificatePath, certificatePassword, isBase64Env);
     const ahora = new Date();
     
     const esValido = ahora >= info.validFrom && ahora <= info.validTo;
@@ -409,17 +419,25 @@ async function verificarCertificado(certificatePath, certificatePassword) {
 }
 
 /**
- * Firma un XML con un certificado digital según los requisitos del SRI
- * @param {string} xmlString - XML a firmar en formato string
- * @param {string} certificatePath - Ruta al archivo del certificado .p12
+ * Firma digitalmente un XML usando un certificado .p12
+ * @param {string} xmlString - String XML a firmar
+ * @param {string} certificatePath - Ruta al archivo del certificado .p12 o nombre de variable de entorno
  * @param {string} certificatePassword - Contraseña del certificado
+ * @param {boolean} isBase64Env - Si es true, certificatePath es el nombre de la variable de entorno con el certificado en base64
  * @returns {Promise<string>} - XML firmado
  */
-async function signXml(xmlString, certificatePath, certificatePassword) {
+async function signXml(xmlString, certificatePath, certificatePassword, isBase64Env = false) {
   try {
-    // Verificar que el certificado existe
+    // Usar la utilidad para cargar el certificado (desde archivo o variable de entorno)
+    const certInfo = loadCertificate(certificatePath, isBase64Env);
+    certificatePath = certInfo.path;
+    
+    console.log(`Certificado para firma cargado correctamente desde: ${certInfo.method}`);
+    console.log(`Ruta del certificado para firma: ${certificatePath}`);
+    
+    // Verificar que el certificado existe (debería existir si loadCertificate no lanzó error)
     if (!fs.existsSync(certificatePath)) {
-      throw new Error(`Certificado no encontrado en: ${certificatePath}`);
+      throw new Error(`Certificado para firma no encontrado en: ${certificatePath} (esto no debería ocurrir)`);
     }
 
     // Verificar que el certificado es válido

@@ -254,32 +254,40 @@ app.post('/api/loyverse/procesar', async (req, res) => {
 // Ruta para verificar el certificado digital
 app.get('/api/certificado/verificar', async (req, res) => {
   try {
+    // Verificar si tenemos el certificado en variable de entorno base64
+    const certificadoBase64 = process.env.CERT_P12_BASE64;
     const certificadoPath = process.env.CERTIFICADO_PATH;
     const certificadoClave = process.env.CERTIFICADO_CLAVE;
-    
-    if (!certificadoPath) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No se ha configurado la ruta del certificado digital (CERTIFICADO_PATH)' 
-      });
-    }
-    
-    // Verificar que el archivo exista
-    const certificadoFullPath = path.join(process.cwd(), certificadoPath);
-    if (!fs.existsSync(certificadoFullPath)) {
-      return res.status(404).json({ 
-        success: false, 
-        message: `El archivo del certificado no existe en la ruta: ${certificadoFullPath}` 
-      });
-    }
-    
-    logger.info(`Verificando certificado en ruta: ${certificadoFullPath}`);
     
     // Importar las funciones de xml-signer
     const { extraerInfoCertificado } = require('./xml-signer');
     
-    // Extraer información directamente con la función mejorada
-    const infoCompleta = extraerInfoCertificado(certificadoFullPath, certificadoClave);
+    let infoCompleta;
+    
+    // Primero intentar con la variable de entorno base64
+    if (certificadoBase64) {
+      logger.info('Verificando certificado desde variable de entorno base64');
+      infoCompleta = extraerInfoCertificado('CERT_P12_BASE64', certificadoClave, true);
+    } 
+    // Si no hay variable base64, intentar con el archivo
+    else if (certificadoPath) {
+      // Verificar que el archivo exista
+      const certificadoFullPath = path.join(process.cwd(), certificadoPath);
+      if (!fs.existsSync(certificadoFullPath)) {
+        return res.status(404).json({ 
+          success: false, 
+          message: `El archivo del certificado no existe en la ruta: ${certificadoFullPath}` 
+        });
+      }
+      
+      logger.info(`Verificando certificado en ruta: ${certificadoFullPath}`);
+      infoCompleta = extraerInfoCertificado(certificadoFullPath, certificadoClave);
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No se ha configurado el certificado digital (CERT_P12_BASE64 o CERTIFICADO_PATH)' 
+      });
+    }
     
     // Crear estructura de respuesta consistente
     const infoCertificado = {
@@ -458,12 +466,21 @@ app.post('/api/factura', async (req, res) => {
     let xmlSigned;
     try {
       const { signXml } = require('./xml-signer');
-      const certificadoPath = path.join(process.cwd(), process.env.CERTIFICADO_PATH);
       const certificadoClave = process.env.CERTIFICADO_CLAVE;
+      const certificadoBase64 = process.env.CERT_P12_BASE64;
       
-      // Intentar firmar el XML
-      xmlSigned = await signXml(xmlContent, certificadoPath, certificadoClave);
+      // Intentar firmar el XML - primero con base64 si está disponible
+      if (certificadoBase64) {
+        logger.info('Firmando XML con certificado desde variable de entorno base64');
+        xmlSigned = await signXml(xmlContent, 'CERT_P12_BASE64', certificadoClave, true);
+      } else {
+        // Si no hay variable base64, usar el archivo
+        const certificadoPath = path.join(process.cwd(), process.env.CERTIFICADO_PATH);
+        logger.info(`Firmando XML con certificado desde archivo: ${certificadoPath}`);
+        xmlSigned = await signXml(xmlContent, certificadoPath, certificadoClave);
+      }
     } catch (error) {
+      logger.error('Error al firmar el XML', { error: error.message, stack: error.stack });
       logger.warn('No se pudo firmar el XML, continuando en modo de prueba', { error: error.message });
       
       // En modo de prueba, usar el XML sin firmar
@@ -669,10 +686,19 @@ async function syncLoyverseToSRI() {
   }
 
   try {
-    // Verificar si existe el certificado digital
+    // Verificar si tenemos el certificado en variable de entorno base64 o como archivo
+    const certificadoBase64 = process.env.CERT_P12_BASE64;
     const certificadoPath = process.env.CERTIFICADO_PATH;
-    if (!fs.existsSync(certificadoPath)) {
-      throw new Error(`Certificado digital no encontrado en: ${certificadoPath}`);
+    
+    // Si no hay certificado base64 ni archivo, lanzar error
+    if (!certificadoBase64 && (!certificadoPath || !fs.existsSync(certificadoPath))) {
+      throw new Error('Certificado digital no encontrado. Configure CERT_P12_BASE64 o CERTIFICADO_PATH correctamente.');
+    }
+    
+    if (certificadoBase64) {
+      console.log('Usando certificado desde variable de entorno base64');
+    } else {
+      console.log(`Usando certificado desde archivo: ${certificadoPath}`);
     }
     
     // Obtener recibos desde la última sincronización

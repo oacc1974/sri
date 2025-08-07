@@ -264,18 +264,32 @@ async function createSRIInvoice(receipt, token) {
     // Generar XML según esquema XSD del SRI
     const xmlContent = generarXmlFactura(facturaData);
     
-    // Ruta al certificado digital
-    const certificatePath = process.env.CERTIFICADO_PATH;
+    // Configuración del certificado digital
     const certificatePassword = process.env.CERTIFICADO_CLAVE;
     const ambiente = process.env.SRI_AMBIENTE || "1";
+    const certificadoBase64 = process.env.CERT_P12_BASE64;
+    const certificatePath = process.env.CERTIFICADO_PATH;
     
-    // Verificar que existe el certificado
-    if (!fs.existsSync(certificatePath)) {
-      throw new Error(`Certificado no encontrado en: ${certificatePath}`);
+    // Determinar si usar certificado base64 o archivo
+    let usarBase64 = false;
+    let certPath = certificatePath;
+    
+    if (certificadoBase64) {
+      console.log('Usando certificado desde variable de entorno base64 para factura');
+      usarBase64 = true;
+      certPath = 'CERT_P12_BASE64';
+    } else if (certificatePath) {
+      // Verificar que existe el certificado
+      if (!fs.existsSync(certificatePath)) {
+        throw new Error(`Certificado no encontrado en: ${certificatePath}`);
+      }
+      console.log(`Usando certificado desde archivo: ${certificatePath}`);
+    } else {
+      throw new Error('No se ha configurado el certificado digital (CERT_P12_BASE64 o CERTIFICADO_PATH)');
     }
     
     // Procesar el comprobante (firmar, enviar y autorizar)
-    const resultado = await procesarComprobante(xmlContent, certificatePath, certificatePassword, ambiente);
+    const resultado = await procesarComprobante(xmlContent, certPath, certificatePassword, ambiente, usarBase64);
     
     // Guardar el XML firmado y autorizado si fue exitoso
     if (resultado.success) {
