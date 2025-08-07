@@ -74,8 +74,12 @@ async function enviarComprobante(xmlSignedContent, ambiente, maxReintentos = 3, 
       });
       
       // Preparar parámetros para el servicio
+      // Convertir el XML firmado a Base64 como requiere el SRI
+      const xmlBase64 = Buffer.from(xmlSignedContent, 'utf8').toString('base64');
+      
+      // Parámetro debe llamarse exactamente 'xml' y contener el XML en Base64
       const params = {
-        xml: xmlSignedContent
+        xml: xmlBase64
       };
       
       // Llamar al método validarComprobante
