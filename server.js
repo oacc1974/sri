@@ -176,6 +176,8 @@ app.post('/api/loyverse/procesar', async (req, res) => {
   try {
     const { receipt_id } = req.body;
     
+    logger.info('Procesando factura de Loyverse', { receipt_id });
+    
     if (!receipt_id) {
       return res.status(400).json({ success: false, message: 'ID de recibo no proporcionado' });
     }
@@ -189,10 +191,9 @@ app.post('/api/loyverse/procesar', async (req, res) => {
     let receipt = null;
     try {
       // Obtener el recibo directamente por su ID
-      const receiptData = await getLoyverseReceiptById(token, receipt_id);
-      if (receiptData) {
-        receipt = receiptData;
-      }
+      logger.info(`Intentando obtener recibo por ID: ${receipt_id}`);
+      receipt = await getLoyverseReceiptById(token, receipt_id);
+      logger.info(`Recibo obtenido por ID: ${receipt_id}`, { receipt_found: !!receipt, receipt_id_from_api: receipt?.id });
     } catch (idError) {
       logger.warn(`No se pudo obtener el recibo por ID, intentando buscar en lista: ${idError.message}`);
       
@@ -201,22 +202,41 @@ app.post('/api/loyverse/procesar', async (req, res) => {
       startTime.setDate(startTime.getDate() - 30);
       const startTimeISO = startTime.toISOString();
       
+      logger.info(`Buscando recibo en lista desde: ${startTimeISO}`);
       const receipts = await getLoyverseReceipts(token, startTimeISO);
+      logger.info(`Recibos obtenidos: ${receipts.length}`);
+      
       receipt = receipts.find(r => r.id === receipt_id);
+      logger.info(`Recibo encontrado en lista: ${!!receipt}`, { receipt_id_from_list: receipt?.id });
     }
     
     if (!receipt) {
+      logger.warn(`Recibo no encontrado: ${receipt_id}`);
       return res.status(404).json({ success: false, message: 'Recibo no encontrado' });
     }
+    
+    // Registrar datos del recibo para depuración
+    logger.info(`Datos del recibo encontrado: ${receipt_id}`, { 
+      receipt_id: receipt.id,
+      receipt_number: receipt.receipt_number,
+      created_at: receipt.created_at,
+      customer_id: receipt.customer_id
+    });
     
     // Obtener datos del cliente si existe
     let customerData = {};
     if (receipt.customer_id) {
       customerData = await getLoyverseCustomer(token, receipt.customer_id);
+      logger.info(`Datos del cliente obtenidos: ${receipt.customer_id}`, { 
+        customer_name: customerData.name,
+        customer_code: customerData.customer_code
+      });
     }
     
     // Crear factura en SRI
+    logger.info(`Iniciando creación de factura en SRI para recibo: ${receipt_id}`);
     const resultado = await createSRIInvoice(receipt, token);
+    logger.info(`Factura creada en SRI: ${resultado.claveAcceso}`, { estado: resultado.estado });
     
     res.json({
       success: true,

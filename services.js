@@ -44,6 +44,7 @@ async function getLoyverseReceipts(token, startTime) {
  */
 async function getLoyverseReceiptById(token, receiptId) {
   try {
+    console.log(`Obteniendo recibo de Loyverse por ID: ${receiptId}`);
     const response = await axios.get(`https://api.loyverse.com/v1.0/receipts/${receiptId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -51,7 +52,27 @@ async function getLoyverseReceiptById(token, receiptId) {
       }
     });
 
-    return response.data || null;
+    console.log('Respuesta de Loyverse:', JSON.stringify(response.data, null, 2));
+
+    // La API puede devolver el recibo directamente o dentro de un objeto
+    if (response.data) {
+      if (response.data.id === receiptId) {
+        // Si la API devuelve el recibo directamente
+        return response.data;
+      } else if (response.data.receipt && response.data.receipt.id === receiptId) {
+        // Si la API devuelve el recibo dentro de un objeto 'receipt'
+        return response.data.receipt;
+      } else if (Array.isArray(response.data.receipts) && response.data.receipts.length > 0) {
+        // Si la API devuelve un array de recibos
+        const foundReceipt = response.data.receipts.find(r => r.id === receiptId);
+        if (foundReceipt) {
+          return foundReceipt;
+        }
+      }
+    }
+    
+    console.log(`No se encontró el recibo con ID: ${receiptId} en la respuesta de la API`);
+    return null;
   } catch (error) {
     console.error('Error obteniendo recibo de Loyverse por ID:', error.response?.data || error.message);
     throw new Error(`Error obteniendo recibo de Loyverse por ID: ${error.response?.data?.message || error.message}`);
