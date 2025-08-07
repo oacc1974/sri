@@ -459,6 +459,11 @@ async function signXml(xmlString, certificatePath, certificatePassword) {
     // Configurar la firma
     const sig = new SignedXml();
     
+    // Configurar los algoritmos de firma y digest
+    sig.signatureAlgorithm = "http://www.w3.org/2000/09/xmldsig#rsa-sha1";
+    sig.canonicalizationAlgorithm = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315";
+    sig.digestAlgorithm = "http://www.w3.org/2000/09/xmldsig#sha1";
+    
     // Configurar la referencia al nodo que se va a firmar
     sig.addReference(
       `//${rootNodeName}`,
@@ -466,13 +471,8 @@ async function signXml(xmlString, certificatePath, certificatePassword) {
         'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
         'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
       ],
-      'http://www.w3.org/2000/09/xmldsig#sha1'
+      sig.digestAlgorithm
     );
-    
-    // Configurar algoritmos de firma y digest
-    sig.signatureAlgorithm = "http://www.w3.org/2000/09/xmldsig#rsa-sha1";
-    sig.canonicalizationAlgorithm = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315";
-    sig.digestAlgorithm = "http://www.w3.org/2000/09/xmldsig#sha1";
     
     // Configurar la clave de firma usando la clave privada en formato PEM
     try {
