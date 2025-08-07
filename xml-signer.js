@@ -4,7 +4,29 @@
  * @see https://www.sri.gob.ec/facturacion-electronica
  */
 const fs = require('fs');
-const SignedXml = require('xml-crypto').SignedXml;
+// Importar xml-crypto y modificar su comportamiento para garantizar que siempre use digestAlgorithm
+const xmlCrypto = require('xml-crypto');
+const SignedXml = xmlCrypto.SignedXml;
+
+// Monkey patch para asegurar que addReference siempre use digestAlgorithm
+const originalAddReference = SignedXml.prototype.addReference;
+SignedXml.prototype.addReference = function() {
+  // Si es la API antigua (posicional)
+  if (arguments.length >= 3 && typeof arguments[0] === 'string' && Array.isArray(arguments[1])) {
+    if (!arguments[2] || arguments[2] === '') {
+      console.log('Aplicando patch: agregando digestAlgorithm SHA-256 a addReference (API posicional)');
+      arguments[2] = 'http://www.w3.org/2001/04/xmlenc#sha256';
+    }
+  } 
+  // Si es la API nueva (objeto de opciones)
+  else if (arguments.length === 1 && typeof arguments[0] === 'object') {
+    if (!arguments[0].digestAlgorithm) {
+      console.log('Aplicando patch: agregando digestAlgorithm SHA-256 a addReference (API objeto)');
+      arguments[0].digestAlgorithm = 'http://www.w3.org/2001/04/xmlenc#sha256';
+    }
+  }
+  return originalAddReference.apply(this, arguments);
+};
 const xpath = require('xpath');
 const { DOMParser, XMLSerializer } = require('xmldom');
 const forge = require('node-forge');

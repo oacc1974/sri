@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prueba de Firma XML - SRI Ecuador</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            background-color: #0d6efd;
+            color: white;
+            font-weight: bold;
+        }
+        textarea {
+            font-family: monospace;
+            min-height: 300px;
+        }
+        #xmlFirmado {
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .alert {
+            margin-top: 20px;
+        }
+        .btn-primary {
+            background-color: #0d6efd;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        h1 {
+            color: #0d6efd;
+            margin-bottom: 30px;
+        }
+        .spinner-border {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">Prueba de Firma XML - SRI Ecuador</h1>
+        
+        <div class="card">
+            <div class="card-header">XML a Firmar</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="xmlInput" class="form-label">Contenido XML:</label>
+                    <textarea class="form-control" id="xmlInput" rows="10" placeholder="Ingrese el contenido XML a firmar"></textarea>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <button class="btn btn-secondary" id="cargarEjemplo">Cargar XML de Ejemplo</button>
+                    <button class="btn btn-primary" id="firmarXml">
+                        <span class="spinner-border spinner-border-sm d-none" id="spinnerFirma" role="status" aria-hidden="true"></span>
+                        Firmar XML
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultadoContainer" class="card d-none">
+            <div class="card-header">Resultado de la Firma</div>
+            <div class="card-body">
+                <div class="alert" id="mensajeResultado" role="alert"></div>
+                <div class="mb-3">
+                    <label for="xmlFirmado" class="form-label">XML Firmado:</label>
+                    <div id="xmlFirmado"></div>
+                </div>
+                <button class="btn btn-secondary" id="copiarXml">Copiar XML Firmado</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const xmlInput = document.getElementById('xmlInput');
+            const firmarXmlBtn = document.getElementById('firmarXml');
+            const cargarEjemploBtn = document.getElementById('cargarEjemplo');
+            const resultadoContainer = document.getElementById('resultadoContainer');
+            const mensajeResultado = document.getElementById('mensajeResultado');
+            const xmlFirmado = document.getElementById('xmlFirmado');
+            const copiarXmlBtn = document.getElementById('copiarXml');
+            const spinnerFirma = document.getElementById('spinnerFirma');
+
+            // XML de ejemplo con estructura básica y atributo Id="comprobante"
+            const xmlEjemplo = `<?xml version="1.0" encoding="UTF-8"?>
+<factura Id="comprobante" version="1.0.0">
+    <infoTributaria>
+        <ambiente>1</ambiente>
+        <tipoEmision>1</tipoEmision>
+        <razonSocial>EMPRESA DE PRUEBA</razonSocial>
+        <nombreComercial>EMPRESA DE PRUEBA</nombreComercial>
+        <ruc>0000000000001</ruc>
+        <claveAcceso>0000000000000000000000000000000000000000000000000</claveAcceso>
+        <codDoc>01</codDoc>
+        <estab>001</estab>
+        <ptoEmi>001</ptoEmi>
+        <secuencial>000000001</secuencial>
+        <dirMatriz>DIRECCION MATRIZ</dirMatriz>
+    </infoTributaria>
+    <infoFactura>
+        <fechaEmision>01/01/2023</fechaEmision>
+        <dirEstablecimiento>DIRECCION ESTABLECIMIENTO</dirEstablecimiento>
+        <obligadoContabilidad>SI</obligadoContabilidad>
+        <tipoIdentificacionComprador>04</tipoIdentificacionComprador>
+        <razonSocialComprador>CONSUMIDOR FINAL</razonSocialComprador>
+        <identificacionComprador>9999999999999</identificacionComprador>
+        <totalSinImpuestos>10.00</totalSinImpuestos>
+        <totalDescuento>0.00</totalDescuento>
+        <totalConImpuestos>
+            <totalImpuesto>
+                <codigo>2</codigo>
+                <codigoPorcentaje>2</codigoPorcentaje>
+                <baseImponible>10.00</baseImponible>
+                <valor>1.20</valor>
+            </totalImpuesto>
+        </totalConImpuestos>
+        <propina>0.00</propina>
+        <importeTotal>11.20</importeTotal>
+        <moneda>DOLAR</moneda>
+    </infoFactura>
+    <detalles>
+        <detalle>
+            <codigoPrincipal>001</codigoPrincipal>
+            <descripcion>PRODUCTO DE PRUEBA</descripcion>
+            <cantidad>1</cantidad>
+            <precioUnitario>10.00</precioUnitario>
+            <descuento>0.00</descuento>
+            <precioTotalSinImpuesto>10.00</precioTotalSinImpuesto>
+            <impuestos>
+                <impuesto>
+                    <codigo>2</codigo>
+                    <codigoPorcentaje>2</codigoPorcentaje>
+                    <tarifa>12</tarifa>
+                    <baseImponible>10.00</baseImponible>
+                    <valor>1.20</valor>
+                </impuesto>
+            </impuestos>
+        </detalle>
+    </detalles>
+    <infoAdicional>
+        <campoAdicional nombre="Email">cliente@example.com</campoAdicional>
+        <campoAdicional nombre="Direccion">DIRECCION CLIENTE</campoAdicional>
+        <campoAdicional nombre="Telefono">0999999999</campoAdicional>
+    </infoAdicional>
+</factura>`;
+
+            // Cargar XML de ejemplo
+            cargarEjemploBtn.addEventListener('click', function() {
+                xmlInput.value = xmlEjemplo;
+            });
+
+            // Firmar XML
+            firmarXmlBtn.addEventListener('click', async function() {
+                const xml = xmlInput.value.trim();
+                if (!xml) {
+                    mostrarMensaje('Por favor, ingrese el contenido XML a firmar.', 'alert-warning');
+                    return;
+                }
+
+                try {
+                    // Mostrar spinner
+                    spinnerFirma.classList.remove('d-none');
+                    firmarXmlBtn.disabled = true;
+
+                    // Enviar XML al endpoint de firma
+                    const response = await fetch('/api/test/firma-xml', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ xmlContent: xml })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        mostrarMensaje(data.message, 'alert-success');
+                        xmlFirmado.textContent = data.xmlFirmado;
+                        resultadoContainer.classList.remove('d-none');
+                    } else {
+                        mostrarMensaje(`Error: ${data.message}`, 'alert-danger');
+                    }
+                } catch (error) {
+                    mostrarMensaje(`Error: ${error.message}`, 'alert-danger');
+                } finally {
+                    // Ocultar spinner
+                    spinnerFirma.classList.add('d-none');
+                    firmarXmlBtn.disabled = false;
+                }
+            });
+
+            // Copiar XML firmado
+            copiarXmlBtn.addEventListener('click', function() {
+                const texto = xmlFirmado.textContent;
+                navigator.clipboard.writeText(texto)
+                    .then(() => {
+                        mostrarMensaje('XML firmado copiado al portapapeles', 'alert-info', 3000);
+                    })
+                    .catch(err => {
+                        mostrarMensaje(`Error al copiar: ${err}`, 'alert-danger');
+                    });
+            });
+
+            // Función para mostrar mensajes
+            function mostrarMensaje(mensaje, tipo, duracion = 0) {
+                mensajeResultado.textContent = mensaje;
+                mensajeResultado.className = `alert ${tipo}`;
+                resultadoContainer.classList.remove('d-none');
+                
+                if (duracion > 0) {
+                    setTimeout(() => {
+                        mensajeResultado.textContent = '';
+                        mensajeResultado.className = 'alert';
+                    }, duracion);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

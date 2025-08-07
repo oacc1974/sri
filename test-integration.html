@@ -133,11 +133,16 @@
         </div>
         
         <button id="test-button">Probar Conversión</button>
+        <button id="test-firma-button">Probar Firma XML</button>
+        <button id="test-loyverse-button">Cargar Facturas Loyverse</button>
         
         <div class="result" id="result">Los resultados aparecerán aquí...</div>
     </div>
 
     <script>
+        // Variables globales para almacenar datos
+        let loyverseReceipts = [];
+        
         document.getElementById('test-button').addEventListener('click', function() {
             const loyverseToken = document.getElementById('loyverse-token').value;
             let receiptData;
@@ -275,6 +280,161 @@
                 document.getElementById('result').innerHTML = `<span class="error">Error en la conversión: ${error.message}</span>`;
             }
         });
+        
+        // Función para probar la firma XML directamente
+        document.getElementById('test-firma-button').addEventListener('click', async function() {
+            const loyverseToken = document.getElementById('loyverse-token').value;
+            let receiptData;
+            
+            try {
+                receiptData = JSON.parse(document.getElementById('receipt-data').value);
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<span class="error">Error al analizar JSON: ${error.message}</span>`;
+                return;
+            }
+            
+            try {
+                const sriData = formatReceiptForSRI(receiptData);
+                
+                // Mostrar mensaje de espera
+                document.getElementById('result').innerHTML = `<span>Procesando firma XML...</span>`;
+                
+                // Llamar al endpoint para probar la firma XML
+                const response = await fetch('/api/test/firma-xml', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(sriData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    document.getElementById('result').innerHTML = `<span class="error">Error en la firma XML: ${result.error}</span>`;
+                } else {
+                    document.getElementById('result').innerHTML = `<span class="success">Firma XML exitosa:</span><br><pre>${result.xmlFirmado}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<span class="error">Error al procesar la firma XML: ${error.message}</span>`;
+            }
+        });
+        
+        // Función para cargar facturas reales de Loyverse
+        document.getElementById('test-loyverse-button').addEventListener('click', async function() {
+            const loyverseToken = document.getElementById('loyverse-token').value;
+            
+            if (!loyverseToken) {
+                document.getElementById('result').innerHTML = `<span class="error">Por favor ingresa un token de Loyverse válido</span>`;
+                return;
+            }
+            
+            try {
+                // Mostrar mensaje de espera
+                document.getElementById('result').innerHTML = `<span>Cargando facturas de Loyverse...</span>`;
+                
+                // Llamar al endpoint para obtener facturas de Loyverse
+                const response = await fetch('/api/loyverse/facturas', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${loyverseToken}`
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    document.getElementById('result').innerHTML = `<span class="error">Error al cargar facturas: ${result.error}</span>`;
+                } else {
+                    // Guardar las facturas en la variable global
+                    loyverseReceipts = result.receipts || [];
+                    
+                    // Mostrar las facturas en formato de tabla
+                    let tableHtml = `
+                        <span class="success">Se cargaron ${loyverseReceipts.length} facturas:</span>
+                        <table border="1" style="width:100%; margin-top:10px; border-collapse:collapse;">
+                            <thead>
+                                <tr>
+                                    <th>Número</th>
+                                    <th>Fecha</th>
+                                    <th>Cliente</th>
+                                    <th>Total</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    loyverseReceipts.forEach((receipt, index) => {
+                        const customer = receipt.customer ? receipt.customer.name : 'Consumidor Final';
+                        const total = receipt.total_money ? receipt.total_money.gross_sales : 0;
+                        const fecha = new Date(receipt.created_at).toLocaleString();
+                        
+                        tableHtml += `
+                            <tr>
+                                <td>${receipt.receipt_number}</td>
+                                <td>${fecha}</td>
+                                <td>${customer}</td>
+                                <td>$${total.toFixed(2)}</td>
+                                <td>
+                                    <button onclick="cargarFactura(${index})">Cargar</button>
+                                    <button onclick="probarFirma(${index})">Probar Firma</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    tableHtml += `
+                            </tbody>
+                        </table>
+                    `;
+                    
+                    document.getElementById('result').innerHTML = tableHtml;
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<span class="error">Error al cargar facturas: ${error.message}</span>`;
+            }
+        });
+        
+        // Función para cargar una factura específica en el textarea
+        function cargarFactura(index) {
+            if (loyverseReceipts && loyverseReceipts[index]) {
+                document.getElementById('receipt-data').value = JSON.stringify(loyverseReceipts[index], null, 2);
+                document.getElementById('result').innerHTML = `<span class="success">Factura ${loyverseReceipts[index].receipt_number} cargada en el editor</span>`;
+            }
+        }
+        
+        // Función para probar la firma con una factura específica
+        async function probarFirma(index) {
+            if (loyverseReceipts && loyverseReceipts[index]) {
+                try {
+                    const receipt = loyverseReceipts[index];
+                    const sriData = formatReceiptForSRI(receipt);
+                    
+                    // Mostrar mensaje de espera
+                    document.getElementById('result').innerHTML = `<span>Procesando firma XML para factura ${receipt.receipt_number}...</span>`;
+                    
+                    // Llamar al endpoint para probar la firma XML
+                    const response = await fetch('/api/test/firma-xml', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(sriData)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.error) {
+                        document.getElementById('result').innerHTML = `<span class="error">Error en la firma XML: ${result.error}</span>`;
+                    } else {
+                        document.getElementById('result').innerHTML = `<span class="success">Firma XML exitosa para factura ${receipt.receipt_number}:</span><br><pre>${result.xmlFirmado}</pre>`;
+                    }
+                } catch (error) {
+                    document.getElementById('result').innerHTML = `<span class="error">Error al procesar la firma XML: ${error.message}</span>`;
+                }
+            }
+        }
     </script>
 </body>
 </html>

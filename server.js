@@ -736,6 +736,71 @@ app.get('/api/comprobantes', (req, res) => {
 });
 
 // Ruta para descargar un comprobante XML
+// Endpoint para probar la firma XML directamente
+app.post('/api/test/firma-xml', async (req, res) => {
+  try {
+    const { xmlContent } = req.body;
+    
+    if (!xmlContent) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'El contenido XML es requerido' 
+      });
+    }
+    
+    logger.info('===== INICIO: Prueba de firma XML directa =====');
+    logger.info(`Contenido XML recibido: ${xmlContent.substring(0, 100)}...`);
+    
+    // Verificar si existe el certificado digital
+    const certificadoPath = process.env.CERTIFICADO_PATH;
+    const certificadoPassword = process.env.CERTIFICADO_PASSWORD;
+    const isBase64Env = process.env.CERTIFICADO_BASE64 ? true : false;
+    const certPath = isBase64Env ? 'CERTIFICADO_BASE64' : certificadoPath;
+    
+    if (!isBase64Env && !fs.existsSync(certificadoPath)) {
+      logger.error(`Certificado no encontrado en: ${certificadoPath}`);
+      return res.status(400).json({ 
+        success: false, 
+        message: `Certificado digital no encontrado en: ${certificadoPath}` 
+      });
+    }
+    
+    // Importar el módulo de firma XML
+    const { signXml } = require('./xml-signer');
+    
+    try {
+      // Firmar el XML
+      logger.info(`Firmando XML con certificado desde: ${isBase64Env ? 'variable de entorno' : certificadoPath}`);
+      const xmlFirmado = await signXml(xmlContent, certPath, certificadoPassword, isBase64Env);
+      
+      // Guardar una copia del XML firmado para depuración
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const xmlPath = path.join(__dirname, 'comprobantes', `test-firma-${timestamp}.xml`);
+      fs.writeFileSync(xmlPath, xmlFirmado);
+      logger.info(`XML firmado guardado en: ${xmlPath}`);
+      
+      // Devolver el XML firmado
+      res.json({
+        success: true,
+        message: 'XML firmado correctamente',
+        xmlFirmado: xmlFirmado
+      });
+    } catch (error) {
+      logger.error('Error al firmar XML:', { error: error.message, stack: error.stack });
+      res.status(500).json({
+        success: false,
+        message: `Error al firmar XML: ${error.message}`
+      });
+    }
+  } catch (error) {
+    logger.error('Error en endpoint de prueba de firma XML:', { error: error.message, stack: error.stack });
+    res.status(500).json({
+      success: false,
+      message: `Error en endpoint de prueba de firma XML: ${error.message}`
+    });
+  }
+});
+
 app.get('/api/comprobantes/download/:claveAcceso', (req, res) => {
   try {
     const { claveAcceso } = req.params;
