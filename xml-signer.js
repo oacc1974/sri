@@ -477,10 +477,11 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     const certificadoInfo = await verificarCertificado(certificatePath, certificatePassword, isBase64Env);
     
     if (!certificadoInfo.valido) {
-      console.warn(`Advertencia en certificado: ${certificadoInfo.razon}, pero se intentará firmar de todas formas`);
-    } else {
-      console.log('Certificado validado correctamente, procediendo a firmar XML...');
+      console.error(`Error en certificado: ${certificadoInfo.razon}`);
+      throw new Error(`Certificado no válido: ${certificadoInfo.razon}`);
     }
+    
+    console.log('Certificado validado correctamente, procediendo a firmar XML...');
     
     // Preparar la ruta del certificado
     let actualCertPath = certificatePath;
@@ -505,23 +506,29 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
 
     // Configurar la firma con los algoritmos requeridos por el SRI
     const sig = new SignedXml({
-      canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+      canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
       signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256'
     });
     
+    // MUY importante en xml-crypto para que reconozca Id/ID/id
+    sig.idAttributes = ['Id', 'ID', 'id'];
+    
     // Configurar la referencia al nodo que se va a firmar
     // SIEMPRE especificar el digestAlgorithm para evitar el error "digestAlgorithm is required"
+    
+    // Selecciona el nodo a firmar: factura con Id/comprobante
+    const xpath = "//*[local-name(.)='factura' and (@Id='comprobante' or @id='comprobante')]";
+    
+    // Si no es factura, usar el nodo raíz
+    const xpathToUse = rootNodeName.toLowerCase() === 'factura' ? xpath : `//*[local-name(.)='${rootNodeName}']`;
+    
+    // Agregar la referencia con el digestAlgorithm explícito
     sig.addReference(
-      `//*[local-name(.)='${rootNodeName}']`,
+      xpathToUse,
       [
-        'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-        'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+        'http://www.w3.org/2000/09/xmldsig#enveloped-signature'
       ],
-      'http://www.w3.org/2001/04/xmlenc#sha256',  // Digest algorithm SIEMPRE especificado
-      '',  // id (opcional)
-      '',  // type (opcional)
-      '',  // uri (opcional)
-      true // forceUri
+      'http://www.w3.org/2001/04/xmlenc#sha256'  // Digest algorithm SIEMPRE especificado
     );
     
     // Asignar la clave privada en formato PEM completo (con headers)
@@ -542,7 +549,10 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // Firmar el documento
     try {
       console.log('Iniciando proceso de firma del XML...');
-      sig.computeSignature(xmlString);
+      // Colocar la firma al final de la factura (o nodo raíz)
+      sig.computeSignature(xmlString, {
+        location: { reference: `//*[local-name(.)='${rootNodeName}']`, action: "append" }
+      });
       console.log('XML firmado correctamente');
       
       // Obtener el XML firmado
