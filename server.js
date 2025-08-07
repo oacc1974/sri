@@ -37,6 +37,10 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Configuración para servir archivos estáticos del directorio public
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Configuración para servir archivos estáticos desde el directorio raíz
+app.use(express.static(path.join(__dirname)));
+console.log(`Sirviendo archivos estáticos desde: ${__dirname}`);
+
 // Variables para almacenar el token y el estado
 let loyverseToken = '';
 let lastSyncTime = null;
