@@ -82,46 +82,14 @@ function generarXmlFactura(factura) {
   // Formatear fecha
   const fechaEmision = moment(factura.fechaEmision).format('DD/MM/YYYY');
   
-  // Generar detalles
-  let detalles = '';
-  factura.items.forEach(item => {
-    // Sanitizar texto para XML
-    const descripcionSanitizada = sanitizarTextoXML(item.descripcion);
-    const codigoPrincipal = sanitizarTextoXML(item.codigoPrincipal || 'SIN CODIGO');
-    
-    const impuestos = item.impuestos.map(imp => `
-          <impuesto>
-            <codigo>${imp.codigo}</codigo>
-            <codigoPorcentaje>${imp.codigoPorcentaje}</codigoPorcentaje>
-            <tarifa>${imp.codigoPorcentaje === '2' ? '12.00' : '0.00'}</tarifa>
-            <baseImponible>${imp.baseImponible.toFixed(2)}</baseImponible>
-            <valor>${imp.valor.toFixed(2)}</valor>
-          </impuesto>`).join('');
-    
-    detalles += `
-        <detalle>
-          <codigoPrincipal>${codigoPrincipal}</codigoPrincipal>
-          <descripcion>${descripcionSanitizada}</descripcion>
-          <cantidad>${item.cantidad.toFixed(2)}</cantidad>
-          <precioUnitario>${item.precioUnitario.toFixed(2)}</precioUnitario>
-          <descuento>${item.descuento.toFixed(2)}</descuento>
-          <precioTotalSinImpuesto>${item.precioTotalSinImpuestos.toFixed(2)}</precioTotalSinImpuesto>
-          <impuestos>${impuestos}
-          </impuestos>
-        </detalle>`;
-  });
-  
-  // Generar pagos
-  let pagos = '';
-  factura.pagos.forEach(pago => {
-    pagos += `
-          <pago>
-            <formaPago>${pago.formaPago}</formaPago>
-            <total>${pago.total.toFixed(2)}</total>
-            <plazo>${pago.plazo}</plazo>
-            <unidadTiempo>${pago.unidadTiempo}</unidadTiempo>
-          </pago>`;
-  });
+  // Sanitizar textos para XML
+  const razonSocial = sanitizarTextoXML(factura.razonSocial);
+  const nombreComercial = sanitizarTextoXML(factura.nombreComercial);
+  const direccionEstablecimiento = sanitizarTextoXML(factura.direccionEstablecimiento);
+  const razonSocialComprador = sanitizarTextoXML(factura.cliente.razonSocial);
+  const direccionComprador = sanitizarTextoXML(factura.cliente.direccion || '');
+  const email = sanitizarTextoXML(factura.cliente.email || '');
+  const telefono = sanitizarTextoXML(factura.cliente.telefono || '');
   
   // Calcular totales de impuestos
   const totalImpuestos = {};
@@ -141,67 +109,110 @@ function generarXmlFactura(factura) {
     });
   });
   
-  let impuestosXml = '';
+  // Construir el XML sin indentación ni espacios innecesarios
+  let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xmlString += '<factura id="comprobante" version="1.1.0">\n';
+  
+  // infoTributaria
+  xmlString += '<infoTributaria>\n';
+  xmlString += `<ambiente>${factura.ambiente}</ambiente>\n`;
+  xmlString += `<tipoEmision>${factura.tipoEmision}</tipoEmision>\n`;
+  xmlString += `<razonSocial>${razonSocial}</razonSocial>\n`;
+  xmlString += `<nombreComercial>${nombreComercial}</nombreComercial>\n`;
+  xmlString += `<ruc>${factura.ruc}</ruc>\n`;
+  xmlString += `<claveAcceso>${claveAcceso}</claveAcceso>\n`;
+  xmlString += '<codDoc>01</codDoc>\n';
+  xmlString += `<estab>${factura.establecimiento}</estab>\n`;
+  xmlString += `<ptoEmi>${factura.puntoEmision}</ptoEmi>\n`;
+  xmlString += `<secuencial>${factura.secuencial.toString().padStart(9, '0')}</secuencial>\n`;
+  xmlString += `<dirMatriz>${direccionEstablecimiento}</dirMatriz>\n`;
+  xmlString += '</infoTributaria>\n';
+  
+  // infoFactura
+  xmlString += '<infoFactura>\n';
+  xmlString += `<fechaEmision>${fechaEmision}</fechaEmision>\n`;
+  xmlString += `<dirEstablecimiento>${direccionEstablecimiento}</dirEstablecimiento>\n`;
+  xmlString += '<obligadoContabilidad>SI</obligadoContabilidad>\n';
+  xmlString += `<tipoIdentificacionComprador>${factura.cliente.tipoIdentificacion}</tipoIdentificacionComprador>\n`;
+  xmlString += `<razonSocialComprador>${razonSocialComprador}</razonSocialComprador>\n`;
+  xmlString += `<identificacionComprador>${factura.cliente.identificacion}</identificacionComprador>\n`;
+  xmlString += `<direccionComprador>${direccionComprador}</direccionComprador>\n`;
+  xmlString += `<totalSinImpuestos>${factura.totalSinImpuestos.toFixed(2)}</totalSinImpuestos>\n`;
+  xmlString += `<totalDescuento>${factura.totalDescuento.toFixed(2)}</totalDescuento>\n`;
+  
+  // totalConImpuestos
+  xmlString += '<totalConImpuestos>\n';
   Object.values(totalImpuestos).forEach(imp => {
-    impuestosXml += `
-          <totalImpuesto>
-            <codigo>${imp.codigo}</codigo>
-            <codigoPorcentaje>${imp.codigoPorcentaje}</codigoPorcentaje>
-            <baseImponible>${imp.baseImponible.toFixed(2)}</baseImponible>
-            <valor>${imp.valor.toFixed(2)}</valor>
-          </totalImpuesto>`;
+    xmlString += '<totalImpuesto>\n';
+    xmlString += `<codigo>${imp.codigo}</codigo>\n`;
+    xmlString += `<codigoPorcentaje>${imp.codigoPorcentaje}</codigoPorcentaje>\n`;
+    xmlString += `<baseImponible>${imp.baseImponible.toFixed(2)}</baseImponible>\n`;
+    xmlString += `<valor>${imp.valor.toFixed(2)}</valor>\n`;
+    xmlString += '</totalImpuesto>\n';
   });
+  xmlString += '</totalConImpuestos>\n';
   
-  // Sanitizar textos para XML
-  const razonSocial = sanitizarTextoXML(factura.razonSocial);
-  const nombreComercial = sanitizarTextoXML(factura.nombreComercial);
-  const direccionEstablecimiento = sanitizarTextoXML(factura.direccionEstablecimiento);
-  const razonSocialComprador = sanitizarTextoXML(factura.cliente.razonSocial);
-  const direccionComprador = sanitizarTextoXML(factura.cliente.direccion || '');
-  const email = sanitizarTextoXML(factura.cliente.email || '');
-  const telefono = sanitizarTextoXML(factura.cliente.telefono || '');
+  xmlString += `<propina>${factura.propina.toFixed(2)}</propina>\n`;
+  xmlString += `<importeTotal>${factura.importeTotal.toFixed(2)}</importeTotal>\n`;
+  xmlString += `<moneda>${factura.moneda}</moneda>\n`;
   
-  // Generar XML completo
-  const xmlString = `<?xml version="1.0" encoding="UTF-8"?>
-<factura id="comprobante" version="1.1.0">
-  <infoTributaria>
-    <ambiente>${factura.ambiente}</ambiente>
-    <tipoEmision>${factura.tipoEmision}</tipoEmision>
-    <razonSocial>${razonSocial}</razonSocial>
-    <nombreComercial>${nombreComercial}</nombreComercial>
-    <ruc>${factura.ruc}</ruc>
-    <claveAcceso>${claveAcceso}</claveAcceso>
-    <codDoc>01</codDoc>
-    <estab>${factura.establecimiento}</estab>
-    <ptoEmi>${factura.puntoEmision}</ptoEmi>
-    <secuencial>${factura.secuencial.toString().padStart(9, '0')}</secuencial>
-    <dirMatriz>${direccionEstablecimiento}</dirMatriz>
-  </infoTributaria>
-  <infoFactura>
-    <fechaEmision>${fechaEmision}</fechaEmision>
-    <dirEstablecimiento>${direccionEstablecimiento}</dirEstablecimiento>
-    <obligadoContabilidad>SI</obligadoContabilidad>
-    <tipoIdentificacionComprador>${factura.cliente.tipoIdentificacion}</tipoIdentificacionComprador>
-    <razonSocialComprador>${razonSocialComprador}</razonSocialComprador>
-    <identificacionComprador>${factura.cliente.identificacion}</identificacionComprador>
-    <direccionComprador>${direccionComprador}</direccionComprador>
-    <totalSinImpuestos>${factura.totalSinImpuestos.toFixed(2)}</totalSinImpuestos>
-    <totalDescuento>${factura.totalDescuento.toFixed(2)}</totalDescuento>
-    <totalConImpuestos>${impuestosXml}
-    </totalConImpuestos>
-    <propina>${factura.propina.toFixed(2)}</propina>
-    <importeTotal>${factura.importeTotal.toFixed(2)}</importeTotal>
-    <moneda>${factura.moneda}</moneda>
-    <pagos>${pagos}
-    </pagos>
-  </infoFactura>
-  <detalles>${detalles}
-  </detalles>
-  <infoAdicional>
-    <campoAdicional nombre="email">${email}</campoAdicional>
-    <campoAdicional nombre="telefono">${telefono}</campoAdicional>
-  </infoAdicional>
-</factura>`;
+  // pagos
+  xmlString += '<pagos>\n';
+  factura.pagos.forEach(pago => {
+    xmlString += '<pago>\n';
+    xmlString += `<formaPago>${pago.formaPago}</formaPago>\n`;
+    xmlString += `<total>${pago.total.toFixed(2)}</total>\n`;
+    xmlString += `<plazo>${pago.plazo}</plazo>\n`;
+    xmlString += `<unidadTiempo>${pago.unidadTiempo}</unidadTiempo>\n`;
+    xmlString += '</pago>\n';
+  });
+  xmlString += '</pagos>\n';
+  xmlString += '</infoFactura>\n';
+  
+  // detalles
+  xmlString += '<detalles>\n';
+  factura.items.forEach(item => {
+    // Sanitizar texto para XML
+    const descripcionSanitizada = sanitizarTextoXML(item.descripcion);
+    const codigoPrincipal = sanitizarTextoXML(item.codigoPrincipal || 'SIN CODIGO');
+    
+    xmlString += '<detalle>\n';
+    xmlString += `<codigoPrincipal>${codigoPrincipal}</codigoPrincipal>\n`;
+    xmlString += `<descripcion>${descripcionSanitizada}</descripcion>\n`;
+    xmlString += `<cantidad>${item.cantidad.toFixed(2)}</cantidad>\n`;
+    xmlString += `<precioUnitario>${item.precioUnitario.toFixed(2)}</precioUnitario>\n`;
+    xmlString += `<descuento>${item.descuento.toFixed(2)}</descuento>\n`;
+    xmlString += `<precioTotalSinImpuesto>${item.precioTotalSinImpuestos.toFixed(2)}</precioTotalSinImpuesto>\n`;
+    
+    // impuestos
+    xmlString += '<impuestos>\n';
+    item.impuestos.forEach(imp => {
+      xmlString += '<impuesto>\n';
+      xmlString += `<codigo>${imp.codigo}</codigo>\n`;
+      xmlString += `<codigoPorcentaje>${imp.codigoPorcentaje}</codigoPorcentaje>\n`;
+      xmlString += `<tarifa>${imp.codigoPorcentaje === '2' ? '12.00' : '0.00'}</tarifa>\n`;
+      xmlString += `<baseImponible>${imp.baseImponible.toFixed(2)}</baseImponible>\n`;
+      xmlString += `<valor>${imp.valor.toFixed(2)}</valor>\n`;
+      xmlString += '</impuesto>\n';
+    });
+    xmlString += '</impuestos>\n';
+    xmlString += '</detalle>\n';
+  });
+  xmlString += '</detalles>\n';
+  
+  // infoAdicional
+  if (email || telefono) {
+    xmlString += '<infoAdicional>\n';
+    if (email) {
+      xmlString += `<campoAdicional nombre="email">${email}</campoAdicional>\n`;
+    }
+    if (telefono) {
+      xmlString += `<campoAdicional nombre="telefono">${telefono}</campoAdicional>\n`;
+    }
+    xmlString += '</infoAdicional>\n';
+  }
+  
+  xmlString += '</factura>';
   
   // Validar el XML generado
   try {
@@ -210,6 +221,7 @@ function generarXmlFactura(factura) {
   } catch (error) {
     throw new Error(`Error al generar el XML de la factura: ${error.message}`);
   }
+}
 }
 
 /**
@@ -221,7 +233,7 @@ function sanitizarTextoXML(texto) {
   if (!texto) return '';
   
   // Reemplazar caracteres especiales y entidades XML
-  return texto
+  let resultado = texto
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -229,20 +241,25 @@ function sanitizarTextoXML(texto) {
     .replace(/'/g, '&apos;')
     // Eliminar caracteres de control y otros caracteres no válidos en XML
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  
+  // Eliminar caracteres no permitidos en XML 1.0
+  resultado = resultado.replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]/g, '');
+  
+  return resultado;
 }
 
 /**
  * Valida un XML contra un esquema XSD
  * @param {string} xmlString - Contenido del XML a validar
  * @param {string} xsdPath - Ruta al archivo XSD
- * @returns {boolean} - true si el XML es válido, false en caso contrario
+ * @returns {Object} - Resultado de la validación {valido: boolean, errores: Array}
  */
 function validarXmlContraXsd(xmlString, xsdPath) {
   try {
     // Verificar si existe el archivo XSD
     if (!fs.existsSync(xsdPath)) {
       console.warn(`Archivo XSD no encontrado: ${xsdPath}. Omitiendo validación.`);
-      return true;
+      return { valido: true, errores: [] };
     }
     
     // Leer el contenido del XSD
@@ -255,10 +272,23 @@ function validarXmlContraXsd(xmlString, xsdPath) {
     const xmlDoc = libxmljs.parseXml(xmlString);
     
     // Validar el XML contra el esquema XSD
-    return xmlDoc.validate(xsdDoc);
+    const esValido = xmlDoc.validate(xsdDoc);
+    
+    // Si no es válido, obtener los errores
+    let errores = [];
+    if (!esValido) {
+      errores = xmlDoc.validationErrors.map(err => ({
+        mensaje: err.message,
+        linea: err.line,
+        columna: err.column
+      }));
+      console.error('Errores de validación XML:', errores);
+    }
+    
+    return { valido: esValido, errores };
   } catch (error) {
     console.error('Error al validar XML contra XSD:', error);
-    return false;
+    return { valido: false, errores: [{ mensaje: error.message }] };
   }
 }
 
