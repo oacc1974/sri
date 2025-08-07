@@ -176,15 +176,34 @@ app.post('/api/loyverse/procesar', async (req, res) => {
   try {
     const { receipt_id } = req.body;
     
-    logger.info('Procesando factura de Loyverse', { receipt_id });
+    logger.info('===== INICIO: Procesando factura de Loyverse =====', { receipt_id });
     
+    // Validar ID de recibo
     if (!receipt_id) {
+      logger.warn('Solicitud recibida sin ID de recibo');
       return res.status(400).json({ success: false, message: 'ID de recibo no proporcionado' });
     }
     
+    // Validar token de Loyverse
     const token = process.env.LOYVERSE_TOKEN;
     if (!token) {
+      logger.error('Token de Loyverse no configurado en variables de entorno');
       return res.status(400).json({ success: false, message: 'Token de Loyverse no configurado' });
+    }
+    
+    // Verificar certificado digital
+    const certificadoBase64 = process.env.CERT_P12_BASE64;
+    const certificadoPath = process.env.CERTIFICADO_PATH;
+    
+    if (!certificadoBase64 && (!certificadoPath || !fs.existsSync(certificadoPath))) {
+      logger.error('Certificado digital no configurado o no encontrado', {
+        certificadoPath,
+        certificadoBase64Configurado: !!certificadoBase64
+      });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Certificado digital no configurado o no encontrado. Verifique la configuración.' 
+      });
     }
     
     // Intentar obtener el recibo directamente por su ID
@@ -193,9 +212,15 @@ app.post('/api/loyverse/procesar', async (req, res) => {
       // Obtener el recibo directamente por su ID
       logger.info(`Intentando obtener recibo por ID: ${receipt_id}`);
       receipt = await getLoyverseReceiptById(token, receipt_id);
-      logger.info(`Recibo obtenido por ID: ${receipt_id}`, { receipt_found: !!receipt, receipt_id_from_api: receipt?.id });
+      logger.info(`Recibo obtenido por ID: ${receipt_id}`, { 
+        receipt_found: !!receipt, 
+        receipt_id_from_api: receipt?.id,
+        receipt_number: receipt?.receipt_number
+      });
     } catch (idError) {
-      logger.warn(`No se pudo obtener el recibo por ID, intentando buscar en lista: ${idError.message}`);
+      logger.warn(`No se pudo obtener el recibo por ID, intentando buscar en lista: ${idError.message}`, {
+        errorStack: idError.stack
+      });
       
       // Si falla, intentar buscarlo en la lista de recibos recientes
       const startTime = new Date();
@@ -206,13 +231,32 @@ app.post('/api/loyverse/procesar', async (req, res) => {
       const receipts = await getLoyverseReceipts(token, startTimeISO);
       logger.info(`Recibos obtenidos: ${receipts.length}`);
       
-      receipt = receipts.find(r => r.id === receipt_id);
-      logger.info(`Recibo encontrado en lista: ${!!receipt}`, { receipt_id_from_list: receipt?.id });
+      // Buscar por ID exacto (insensible a mayúsculas/minúsculas)
+      const normalizedReceiptId = receipt_id.toString().trim().toLowerCase();
+      receipt = receipts.find(r => r.id && r.id.toString().toLowerCase() === normalizedReceiptId);
+      
+      logger.info(`Recibo encontrado en lista: ${!!receipt}`, { 
+        receipt_id_from_list: receipt?.id,
+        receipt_number: receipt?.receipt_number
+      });
     }
     
+    // Verificar si se encontró el recibo
     if (!receipt) {
       logger.warn(`Recibo no encontrado: ${receipt_id}`);
-      return res.status(404).json({ success: false, message: 'Recibo no encontrado' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Recibo no encontrado. Verifique el ID proporcionado.' 
+      });
+    }
+    
+    // Validar estructura mínima del recibo
+    if (!receipt.line_items || !Array.isArray(receipt.line_items) || receipt.line_items.length === 0) {
+      logger.error('El recibo no tiene líneas de items', { receipt_id: receipt.id });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'El recibo no contiene líneas de items. No se puede procesar.' 
+      });
     }
     
     // Registrar datos del recibo para depuración
@@ -220,34 +264,91 @@ app.post('/api/loyverse/procesar', async (req, res) => {
       receipt_id: receipt.id,
       receipt_number: receipt.receipt_number,
       created_at: receipt.created_at,
-      customer_id: receipt.customer_id
+      customer_id: receipt.customer_id,
+      total: receipt.total,
+      items_count: receipt.line_items.length
     });
     
     // Obtener datos del cliente si existe
     let customerData = {};
     if (receipt.customer_id) {
-      customerData = await getLoyverseCustomer(token, receipt.customer_id);
-      logger.info(`Datos del cliente obtenidos: ${receipt.customer_id}`, { 
-        customer_name: customerData.name,
-        customer_code: customerData.customer_code
-      });
+      try {
+        customerData = await getLoyverseCustomer(token, receipt.customer_id);
+        logger.info(`Datos del cliente obtenidos: ${receipt.customer_id}`, { 
+          customer_name: customerData.name,
+          customer_code: customerData.customer_code,
+          customer_email: customerData.email,
+          customer_phone: customerData.phone_number
+        });
+      } catch (customerError) {
+        logger.warn(`Error obteniendo datos del cliente: ${customerError.message}`, {
+          customer_id: receipt.customer_id
+        });
+        // No interrumpimos el flujo, continuamos con cliente vacío
+      }
+    } else {
+      logger.warn('El recibo no tiene cliente asociado, se usará consumidor final');
     }
     
     // Crear factura en SRI
     logger.info(`Iniciando creación de factura en SRI para recibo: ${receipt_id}`);
-    const resultado = await createSRIInvoice(receipt, token);
-    logger.info(`Factura creada en SRI: ${resultado.claveAcceso}`, { estado: resultado.estado });
-    
-    res.json({
-      success: true,
-      message: 'Factura procesada correctamente',
-      claveAcceso: resultado.claveAcceso,
-      estado: resultado.estado,
-      resultado
-    });
+    try {
+      const resultado = await createSRIInvoice(receipt, token);
+      
+      if (!resultado || !resultado.claveAcceso) {
+        logger.error('Respuesta inválida de createSRIInvoice', { resultado });
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Error procesando factura: Respuesta inválida del servicio SRI' 
+        });
+      }
+      
+      logger.info(`Factura creada en SRI: ${resultado.claveAcceso}`, { 
+        estado: resultado.estado,
+        mensajeSRI: resultado.mensajeSRI || 'Sin mensaje'
+      });
+      
+      res.json({
+        success: true,
+        message: 'Factura procesada correctamente',
+        claveAcceso: resultado.claveAcceso,
+        estado: resultado.estado,
+        resultado
+      });
+      
+      logger.info('===== FIN: Factura procesada correctamente =====');
+    } catch (sriError) {
+      logger.error('Error en proceso de facturación electrónica SRI', { 
+        error: sriError.message,
+        stack: sriError.stack,
+        receipt_id: receipt.id
+      });
+      
+      // Determinar tipo de error para mensaje más específico
+      let mensajeError = 'Error procesando factura en SRI';
+      if (sriError.message.includes('certificado')) {
+        mensajeError = 'Error con el certificado digital. Verifique que sea válido y esté correctamente configurado.';
+      } else if (sriError.message.includes('firma')) {
+        mensajeError = 'Error en el proceso de firma digital del comprobante.';
+      } else if (sriError.message.includes('conexión') || sriError.message.includes('timeout')) {
+        mensajeError = 'Error de conexión con los servicios del SRI. Intente nuevamente más tarde.';
+      }
+      
+      res.status(500).json({ 
+        success: false, 
+        message: mensajeError,
+        error: sriError.message
+      });
+    }
   } catch (error) {
-    logger.error('Error procesando factura de Loyverse', { error: error.message });
-    res.status(500).json({ success: false, message: `Error procesando factura: ${error.message}` });
+    logger.error('===== ERROR: Procesando factura de Loyverse =====', { 
+      error: error.message,
+      stack: error.stack 
+    });
+    res.status(500).json({ 
+      success: false, 
+      message: `Error procesando factura: ${error.message}` 
+    });
   }
 });
 

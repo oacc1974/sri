@@ -44,39 +44,224 @@ async function getLoyverseReceipts(token, startTime) {
  */
 async function getLoyverseReceiptById(token, receiptId) {
   try {
-    console.log(`Obteniendo recibo de Loyverse por ID: ${receiptId}`);
-    const response = await axios.get(`https://api.loyverse.com/v1.0/receipts/${receiptId}`, {
+    console.log(`===== INICIO: Obteniendo recibo de Loyverse por ID: ${receiptId} =====`);
+    
+    // Validar token
+    if (!token || typeof token !== 'string' || token.trim() === '') {
+      console.error('Token de API inválido o vacío');
+      throw new Error('Token de API de Loyverse inválido o vacío');
+    }
+    
+    // Validar que el ID del recibo sea una cadena no vacía
+    if (!receiptId || typeof receiptId !== 'string' || receiptId.trim() === '') {
+      console.error('ID de recibo inválido:', receiptId);
+      throw new Error(`ID de recibo inválido o vacío: ${receiptId}`);
+    }
+    
+    // Normalizar el ID del recibo (eliminar espacios y convertir a minúsculas)
+    const normalizedReceiptId = receiptId.toString().trim().toLowerCase();
+    console.log(`ID de recibo normalizado: ${normalizedReceiptId}`);
+    
+    // Realizar la solicitud a la API de Loyverse
+    console.log(`Realizando solicitud a: https://api.loyverse.com/v1.0/receipts/${normalizedReceiptId}`);
+    console.log(`Usando token: ${token.substring(0, 5)}...${token.substring(token.length - 5)}`);
+    
+    const response = await axios.get(`https://api.loyverse.com/v1.0/receipts/${normalizedReceiptId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 15000 // 15 segundos de timeout (aumentado para evitar problemas de red)
     });
 
-    console.log('Respuesta de Loyverse:', JSON.stringify(response.data, null, 2));
+    // Registrar la respuesta para depuración
+    console.log('Respuesta de Loyverse - Status:', response.status);
+    console.log('Respuesta de Loyverse - Headers:', JSON.stringify(response.headers, null, 2));
+    
+    // Verificar si la respuesta es válida
+    if (!response.data) {
+      console.error('Respuesta de API sin datos');
+      return null;
+    }
+    
+    // Registrar estructura de la respuesta para depuración
+    console.log('Estructura de la respuesta:', Object.keys(response.data));
+    console.log('Muestra de datos:', JSON.stringify(response.data).substring(0, 500) + '...');
+    
+    let receipt = null;
 
-    // La API puede devolver el recibo directamente o dentro de un objeto
-    if (response.data) {
-      if (response.data.id === receiptId) {
-        // Si la API devuelve el recibo directamente
-        return response.data;
-      } else if (response.data.receipt && response.data.receipt.id === receiptId) {
-        // Si la API devuelve el recibo dentro de un objeto 'receipt'
-        return response.data.receipt;
-      } else if (Array.isArray(response.data.receipts) && response.data.receipts.length > 0) {
-        // Si la API devuelve un array de recibos
-        const foundReceipt = response.data.receipts.find(r => r.id === receiptId);
-        if (foundReceipt) {
-          return foundReceipt;
+    // Estrategia 1: Verificar si la respuesta contiene directamente el recibo
+    if (response.data.id && response.data.id.toString().toLowerCase() === normalizedReceiptId) {
+      console.log('Recibo encontrado directamente en la respuesta');
+      receipt = response.data;
+    }
+    // Estrategia 2: Verificar si el recibo está dentro de un objeto 'receipt'
+    else if (response.data.receipt && response.data.receipt.id && 
+        response.data.receipt.id.toString().toLowerCase() === normalizedReceiptId) {
+      console.log('Recibo encontrado dentro del objeto receipt');
+      receipt = response.data.receipt;
+    }
+    // Estrategia 3: Verificar si hay un array de recibos
+    else if (Array.isArray(response.data.receipts)) {
+      console.log(`Buscando recibo en array de ${response.data.receipts.length} elementos`);
+      
+      // Buscar por ID exacto (insensible a mayúsculas/minúsculas)
+      const foundReceipt = response.data.receipts.find(r => 
+        r.id && r.id.toString().toLowerCase() === normalizedReceiptId);
+      
+      if (foundReceipt) {
+        console.log('Recibo encontrado en el array de recibos');
+        receipt = foundReceipt;
+      }
+    }
+    // Estrategia 4: Intentar extraer cualquier objeto que parezca un recibo
+    else {
+      for (const key in response.data) {
+        if (typeof response.data[key] === 'object' && response.data[key] !== null) {
+          const obj = response.data[key];
+          if (obj.id && obj.id.toString().toLowerCase() === normalizedReceiptId) {
+            console.log(`Recibo encontrado en propiedad: ${key}`);
+            receipt = obj;
+            break;
+          }
         }
       }
     }
     
-    console.log(`No se encontró el recibo con ID: ${receiptId} en la respuesta de la API`);
-    return null;
+    // Estrategia 5: Buscar en cualquier estructura anidada (búsqueda recursiva)
+    if (!receipt) {
+      console.log('Intentando búsqueda recursiva en la respuesta...');
+      receipt = findReceiptRecursively(response.data, normalizedReceiptId);
+      if (receipt) {
+        console.log('Recibo encontrado mediante búsqueda recursiva');
+      }
+    }
+    
+    // Si no se encontró el recibo, intentar con endpoint alternativo
+    if (!receipt) {
+      console.log('Recibo no encontrado en respuesta directa, intentando endpoint alternativo...');
+      try {
+        // Intentar obtener recibos recientes y filtrar por ID
+        const altResponse = await axios.get(`https://api.loyverse.com/v1.0/receipts`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          params: {
+            created_at_min: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 días atrás
+            limit: 250 // Obtener más recibos para aumentar probabilidad de encontrarlo
+          },
+          timeout: 15000
+        });
+        
+        console.log(`Buscando recibo en lista de ${altResponse.data.receipts?.length || 0} recibos recientes...`);
+        
+        if (Array.isArray(altResponse.data.receipts)) {
+          const foundReceipt = altResponse.data.receipts.find(r => 
+            r.id && r.id.toString().toLowerCase() === normalizedReceiptId);
+          
+          if (foundReceipt) {
+            console.log('Recibo encontrado en lista de recibos recientes');
+            receipt = foundReceipt;
+          }
+        }
+      } catch (altError) {
+        console.error('Error en búsqueda alternativa:', altError.message);
+      }
+    }
+    
+    // Si no se encontró el recibo, registrar error y retornar null
+    if (!receipt) {
+      console.error(`No se encontró el recibo con ID: ${receiptId} en la respuesta de la API`);
+      console.error('Datos de respuesta:', JSON.stringify(response.data, null, 2));
+      return null;
+    }
+    
+    // Validar estructura mínima del recibo para integración con SRI
+    if (!receipt.id || !receipt.receipt_number) {
+      console.error('El recibo no tiene la estructura mínima requerida (id o receipt_number):', receipt);
+      return null;
+    }
+    
+    // Validar que el recibo tenga líneas de items
+    if (!receipt.line_items || !Array.isArray(receipt.line_items) || receipt.line_items.length === 0) {
+      console.error('El recibo no tiene líneas de items:', receipt);
+      return null;
+    }
+    
+    console.log(`Recibo encontrado con ${receipt.line_items.length} items:`, {
+      id: receipt.id,
+      receipt_number: receipt.receipt_number,
+      created_at: receipt.created_at,
+      customer_id: receipt.customer_id || 'Sin cliente asociado',
+      total: receipt.total
+    });
+    
+    console.log(`===== FIN: Recibo de Loyverse obtenido exitosamente =====`);
+    return receipt;
   } catch (error) {
-    console.error('Error obteniendo recibo de Loyverse por ID:', error.response?.data || error.message);
-    throw new Error(`Error obteniendo recibo de Loyverse por ID: ${error.response?.data?.message || error.message}`);
+    console.error('===== ERROR: Obteniendo recibo de Loyverse por ID =====');
+    console.error('Detalles del error:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      stack: error.stack
+    });
+    
+    // Si es un error de autorización, agregar información adicional
+    if (error.response?.status === 401) {
+      console.error('Error de autorización: El token de API de Loyverse es inválido o ha expirado');
+    }
+    // Si es un error 404, el recibo no existe
+    else if (error.response?.status === 404) {
+      console.error(`El recibo con ID ${receiptId} no existe en Loyverse`);
+    }
+    // Si es un error de timeout
+    else if (error.code === 'ECONNABORTED') {
+      console.error('Timeout al conectar con la API de Loyverse');
+    }
+    
+    throw new Error(`Error obteniendo recibo de Loyverse por ID ${receiptId}: ${error.response?.data?.message || error.message}`);
   }
+}
+
+/**
+ * Función auxiliar para buscar un recibo recursivamente en una estructura de datos
+ * @param {Object|Array} data - Datos donde buscar
+ * @param {string} receiptId - ID del recibo a buscar (normalizado)
+ * @returns {Object|null} - Recibo encontrado o null
+ */
+function findReceiptRecursively(data, receiptId) {
+  // Caso base: si data no es un objeto o array, retornar null
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+  
+  // Si es un array, buscar en cada elemento
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const found = findReceiptRecursively(item, receiptId);
+      if (found) return found;
+    }
+    return null;
+  }
+  
+  // Si es un objeto que parece un recibo, verificar
+  if (data.id && data.id.toString().toLowerCase() === receiptId && 
+      (data.receipt_number || data.line_items)) {
+    return data;
+  }
+  
+  // Buscar recursivamente en todas las propiedades
+  for (const key in data) {
+    if (typeof data[key] === 'object' && data[key] !== null) {
+      const found = findReceiptRecursively(data[key], receiptId);
+      if (found) return found;
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -252,21 +437,49 @@ function formatReceiptForSRI(receipt, customerData = {}) {
  */
 async function createSRIInvoice(receipt, token) {
   try {
+    console.log('Iniciando proceso de creación de factura en SRI para recibo:', receipt.id);
+    
+    // Validar que el recibo tenga la estructura mínima necesaria
+    if (!receipt || !receipt.id || !receipt.line_items || !Array.isArray(receipt.line_items)) {
+      console.error('Estructura de recibo inválida:', JSON.stringify(receipt, null, 2));
+      throw new Error('El recibo no tiene la estructura requerida para procesar en SRI');
+    }
+    
+    console.log(`Recibo validado con ${receipt.line_items.length} items`);
+    
     // Obtener datos completos del cliente si existe customer_id
     let customerData = {};
     if (receipt.customer_id && token) {
-      customerData = await getLoyverseCustomer(token, receipt.customer_id);
+      console.log(`Obteniendo datos del cliente con ID: ${receipt.customer_id}`);
+      try {
+        customerData = await getLoyverseCustomer(token, receipt.customer_id);
+        console.log('Datos del cliente obtenidos:', JSON.stringify(customerData, null, 2));
+      } catch (customerError) {
+        console.warn(`Error obteniendo datos del cliente: ${customerError.message}. Continuando sin datos de cliente.`);
+      }
+    } else {
+      console.log('El recibo no tiene customer_id asociado, se usará consumidor final');
     }
     
     // Convertir recibo de Loyverse al formato para SRI
+    console.log('Convirtiendo recibo al formato SRI...');
     const facturaData = formatReceiptForSRI(receipt, customerData);
+    console.log('Datos de factura formateados para SRI:', JSON.stringify(facturaData, null, 2));
     
     // Generar XML según esquema XSD del SRI
+    console.log('Generando XML según esquema XSD del SRI...');
     const xmlContent = generarXmlFactura(facturaData);
+    console.log(`XML generado con longitud: ${xmlContent.length} caracteres`);
     
     // Configuración del certificado digital
     const certificatePassword = process.env.CERTIFICADO_CLAVE;
+    if (!certificatePassword) {
+      throw new Error('No se ha configurado la clave del certificado digital (CERTIFICADO_CLAVE)');
+    }
+    
     const ambiente = process.env.SRI_AMBIENTE || "1";
+    console.log(`Ambiente SRI configurado: ${ambiente === "1" ? "PRUEBAS" : "PRODUCCIÓN"}`);
+    
     const certificadoBase64 = process.env.CERT_P12_BASE64;
     const certificatePath = process.env.CERTIFICADO_PATH;
     
@@ -289,37 +502,51 @@ async function createSRIInvoice(receipt, token) {
     }
     
     // Procesar el comprobante (firmar, enviar y autorizar)
+    console.log('Procesando comprobante (firma, envío y autorización)...');
     const resultado = await procesarComprobante(xmlContent, certPath, certificatePassword, ambiente, usarBase64);
+    console.log('Resultado del procesamiento:', JSON.stringify(resultado, null, 2));
     
     // Guardar el XML firmado y autorizado si fue exitoso
     if (resultado.success) {
+      console.log(`Procesamiento exitoso. Clave de acceso: ${resultado.claveAcceso}, Estado: ${resultado.estado}`);
       const directorioXml = path.join(__dirname, 'comprobantes');
       
       // Crear directorio si no existe
       if (!fs.existsSync(directorioXml)) {
         fs.mkdirSync(directorioXml, { recursive: true });
+        console.log(`Directorio de comprobantes creado: ${directorioXml}`);
       }
       
       // Guardar XML firmado y autorizado
-      fs.writeFileSync(
-        path.join(directorioXml, `${resultado.claveAcceso}.xml`),
-        resultado.details.comprobante
-      );
+      const directorioEstado = path.join(directorioXml, resultado.estado.toLowerCase());
+      if (!fs.existsSync(directorioEstado)) {
+        fs.mkdirSync(directorioEstado, { recursive: true });
+        console.log(`Directorio de estado creado: ${directorioEstado}`);
+      }
+      
+      const archivoXml = path.join(directorioEstado, `${resultado.claveAcceso}.xml`);
+      fs.writeFileSync(archivoXml, resultado.xmlAutorizado || resultado.xmlFirmado);
+      
+      console.log(`XML guardado en: ${archivoXml}`);
+    } else {
+      console.error('El procesamiento no fue exitoso:', resultado.message || 'Sin mensaje de error');
     }
     
-    console.log(`Factura procesada en SRI para recibo ${receipt.receipt_number}:`, 
-      resultado.success ? 'AUTORIZADA' : 'RECHAZADA');
-    
-    return {
-      success: resultado.success,
-      message: resultado.message,
-      claveAcceso: resultado.claveAcceso,
-      autorizacion: resultado.details,
-      receipt: receipt.receipt_number
-    };
+    return resultado;
   } catch (error) {
     console.error('Error creando factura en SRI:', error);
-    throw new Error(`Error creando factura en SRI: ${error.message}`);
+    console.error('Detalles del error:', {
+      message: error.message,
+      stack: error.stack
+    });
+    
+    // Devolver un objeto de error estructurado
+    return {
+      success: false,
+      message: `Error creando factura en SRI: ${error.message}`,
+      error: error.message,
+      estado: 'ERROR'
+    };
   }
 }
 
