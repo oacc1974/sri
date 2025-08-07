@@ -59,6 +59,17 @@ function extraerInfoCertificado(certificatePath, certificatePassword) {
     const validFrom = certificate.validity.notBefore;
     const validTo = certificate.validity.notAfter;
     
+    // Extraer extensiones del certificado
+    const extensions = [];
+    if (certificate.extensions && certificate.extensions.length) {
+      certificate.extensions.forEach(ext => {
+        extensions.push({
+          name: ext.name,
+          ...ext
+        });
+      });
+    }
+    
     // Intentar extraer más información del certificado
     let ruc = null;
     let nombreTitular = null;
@@ -70,42 +81,101 @@ function extraerInfoCertificado(certificatePath, certificatePassword) {
     console.log('Campos disponibles en el certificado:');
     attrs.forEach(attr => {
       console.log(`- ${attr.name || attr.type}: ${attr.value}`);
+      
+      // Si encontramos un campo que parece contener el nombre completo del titular
+      if (attr.value && typeof attr.value === 'string' && 
+          (attr.name === 'commonName' || attr.type === '2.5.4.3') && 
+          attr.value.includes('VERONICA') && attr.value.includes('ORRALA')) {
+        nombreTitular = attr.value;
+        console.log(`Nombre titular encontrado en commonName: ${nombreTitular}`);
+      }
+      
+      // Si encontramos un campo que parece contener el RUC
+      if (attr.value && typeof attr.value === 'string') {
+        // Buscar patrones de RUC ecuatoriano (13 dígitos)
+        const rucMatch = attr.value.match(/\b(\d{13})\b/);
+        if (rucMatch) {
+          ruc = rucMatch[1];
+          console.log(`RUC encontrado en ${attr.name || attr.type}: ${ruc}`);
+        }
+      }
     });
     
     // Buscar RUC en varios campos posibles
     // En certificados ecuatorianos, el RUC suele estar en serialNumber con formato "RUC:0920069853001"
     // o en UID o en OID.2.5.4.45
-    const camposRuc = ['serialNumber', 'UID', 'OID.2.5.4.45', '2.5.4.45'];
-    for (const campo of camposRuc) {
-      const field = certificate.subject.getField(campo);
-      if (field) {
-        let valor = field.value;
-        console.log(`Campo ${campo} encontrado con valor: ${valor}`);
-        
-        // Si el valor contiene "RUC:", extraer solo el número
-        if (typeof valor === 'string' && valor.includes('RUC:')) {
-          valor = valor.split('RUC:')[1].trim();
+    if (!ruc) {
+      const camposRuc = ['serialNumber', 'UID', 'OID.2.5.4.45', '2.5.4.45', 'subjectAltName'];
+      for (const campo of camposRuc) {
+        const field = certificate.subject.getField(campo);
+        if (field) {
+          let valor = field.value;
+          console.log(`Campo ${campo} encontrado con valor: ${valor}`);
+          
+          // Si el valor contiene "RUC:", extraer solo el número
+          if (typeof valor === 'string' && valor.includes('RUC:')) {
+            valor = valor.split('RUC:')[1].trim();
+          }
+          
+          // Verificar si parece un RUC ecuatoriano (13 dígitos)
+          if (typeof valor === 'string' && /^\d{10,13}$/.test(valor.replace(/\D/g, ''))) {
+            ruc = valor.replace(/\D/g, '');
+            console.log(`RUC extraído: ${ruc}`);
+            break;
+          }
         }
-        
-        // Verificar si parece un RUC ecuatoriano (13 dígitos)
-        if (typeof valor === 'string' && /^\d{10,13}$/.test(valor.replace(/\D/g, ''))) {
-          ruc = valor.replace(/\D/g, '');
-          console.log(`RUC extraído: ${ruc}`);
+      }
+      
+      // Si aún no encontramos el RUC, buscar en todos los atributos por un patrón de 13 dígitos
+      if (!ruc) {
+        attrs.forEach(attr => {
+          if (!ruc && attr.value && typeof attr.value === 'string') {
+            // Buscar cualquier secuencia de exactamente 13 dígitos (formato RUC ecuatoriano)
+            const rucMatch = attr.value.match(/\b(\d{13})\b/);
+            if (rucMatch) {
+              ruc = rucMatch[1];
+              console.log(`RUC encontrado por patrón en ${attr.name || attr.type}: ${ruc}`);
+            }
+          }
+        });
+      }
+    }
+    
+    // Buscar nombre del titular si aún no lo hemos encontrado
+    if (!nombreTitular) {
+      // Priorizar CN para persona natural, O para organización
+      const camposNombre = ['CN', 'O', 'OU', 'name', 'givenName', 'surname'];
+      for (const campo of camposNombre) {
+        const field = certificate.subject.getField(campo);
+        if (field) {
+          nombreTitular = field.value;
+          console.log(`Nombre encontrado en campo ${campo}: ${nombreTitular}`);
           break;
         }
       }
     }
     
-    // Buscar nombre del titular (priorizar CN para persona natural, O para organización)
-    // El nombre del titular debe ser el sujeto principal del certificado
-    const camposNombre = ['CN', 'O', 'OU', 'name', 'givenName', 'surname'];
-    for (const campo of camposNombre) {
-      const field = certificate.subject.getField(campo);
-      if (field) {
-        nombreTitular = field.value;
-        console.log(`Nombre encontrado en campo ${campo}: ${nombreTitular}`);
-        break;
+    // Si aún no tenemos el nombre, intentar extraerlo del subject directamente
+    if (!nombreTitular && subject && subject.value) {
+      nombreTitular = subject.value;
+      console.log(`Nombre extraído del subject: ${nombreTitular}`);
+    }
+    
+    // Determinar si es un certificado de firma digital
+    let esFirmaDigital = false;
+    if (certificate.extensions) {
+      for (let i = 0; i < certificate.extensions.length; i++) {
+        const ext = certificate.extensions[i];
+        if (ext.name === 'keyUsage' && ext.digitalSignature === true && ext.nonRepudiation === true) {
+          esFirmaDigital = true;
+          break;
+        }
       }
+    }
+    
+    // Si no pudimos determinar por extensiones, asumir que es firma digital si tiene RUC y nombre
+    if (!esFirmaDigital && ruc && nombreTitular) {
+      esFirmaDigital = true;
     }
     
     return {
@@ -116,7 +186,9 @@ function extraerInfoCertificado(certificatePath, certificatePassword) {
       privateKey: privateKey,
       certificate: certificate,
       rucTitular: ruc,
-      nombreTitular: nombreTitular
+      nombreTitular: nombreTitular,
+      esFirmaDigital: esFirmaDigital,
+      extensions: extensions
     };
   } catch (error) {
     console.error('Error al extraer información del certificado:', error);
@@ -156,8 +228,24 @@ async function verificarCertificado(certificatePath, certificatePassword) {
     const datosEmisor = extraerDatos(info.issuer);
     
     // Verificar si el certificado es de firma digital (no de sello de tiempo u otro tipo)
-    // Para certificados ecuatorianos, asumimos que es firma digital si tiene información del titular
-    const esFirmaDigital = true; // Forzamos a true para permitir el flujo
+    // Usar el valor ya calculado en extraerInfoCertificado o verificar por extensiones
+    let esFirmaDigital = info.esFirmaDigital;
+    
+    // Si no está definido, verificar por extensiones
+    if (esFirmaDigital === undefined && info.extensions) {
+      esFirmaDigital = info.extensions.some(ext => 
+        ext.name === 'keyUsage' && 
+        ext.digitalSignature === true && 
+        ext.nonRepudiation === true
+      );
+    }
+    
+    // Si aún no está definido pero tenemos RUC y nombre, asumir que es firma digital
+    if (esFirmaDigital === undefined && info.rucTitular && info.nombreTitular) {
+      esFirmaDigital = true;
+    } else if (esFirmaDigital === undefined) {
+      esFirmaDigital = false;
+    }
     
     return {
       valido: esValido,
@@ -168,10 +256,10 @@ async function verificarCertificado(certificatePath, certificatePassword) {
         emisor: info.issuer,
         emisorDatos: datosEmisor,
         entidadCertificadora: datosEmisor.O || datosEmisor.CN || 'Desconocida',
-        sujeto: info.nombreTitular || info.subject,
+        sujeto: info.subject,
         sujetoDatos: datosSujeto,
-        nombreTitular: info.nombreTitular || datosSujeto.CN || process.env.EMPRESA_RAZON_SOCIAL || 'ORRALA GUERRERO VERONICA ALCIRA',
-        rucTitular: info.rucTitular || process.env.EMPRESA_RUC || '0918097783001',
+        nombreTitular: info.nombreTitular || datosSujeto.CN || 'Desconocido',
+        rucTitular: info.rucTitular || 'No especificado',
         validoDesde: info.validFrom,
         validoHasta: info.validTo,
         serialNumber: info.serialNumber || 'No disponible',
@@ -200,15 +288,6 @@ async function verificarCertificado(certificatePath, certificatePassword) {
  */
 async function signXml(xmlString, certificatePath, certificatePassword) {
   try {
-    // Verificar si estamos en modo de prueba
-    const modoPrueba = process.env.MODO_PRUEBA === 'true' || !fs.existsSync(certificatePath);
-    
-    if (modoPrueba) {
-      console.log('MODO PRUEBA: Devolviendo XML sin firmar');
-      // En modo de prueba, simplemente devolvemos el XML sin firmar
-      return xmlString;
-    }
-
     // Verificar que el certificado existe
     if (!fs.existsSync(certificatePath)) {
       throw new Error(`Certificado no encontrado en: ${certificatePath}`);
@@ -218,85 +297,77 @@ async function signXml(xmlString, certificatePath, certificatePassword) {
     const verificacion = verificarCertificado(certificatePath, certificatePassword);
     console.log('Resultado de verificación del certificado:', JSON.stringify(verificacion, null, 2));
     
-    // Forzar a continuar aunque el certificado no sea válido
-    // if (!verificacion.valido) {
-    //   throw new Error(`Certificado no válido: ${verificacion.razon || 'Razón desconocida'}`);
-    // }
+    if (!verificacion.valido) {
+      throw new Error(`Certificado no válido: ${verificacion.razon || 'Razón desconocida'}`);
+    }
     
     console.log(`Firmando XML con certificado de: ${verificacion.info.sujeto}`);
     
+    // Leer el certificado
+    const certBuffer = fs.readFileSync(certificatePath);
+    
+    // Crear el documento XML
+    const doc = new DOMParser().parseFromString(xmlString, 'text/xml');
+    
+    // Obtener el nodo raíz para firmar (factura, notaCredito, etc.)
+    const rootNodeName = doc.documentElement.nodeName;
+    const rootNode = doc.documentElement;
+    
+    if (!rootNode) {
+      throw new Error(`No se encontró el nodo raíz ${rootNodeName} en el XML`);
+    }
+    
+    // Configurar la firma
+    const sig = new SignedXml();
+    
+    // Configurar la referencia al nodo que se va a firmar
+    sig.addReference(
+      `//${rootNodeName}`,
+      [
+        'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+        'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+      ],
+      'http://www.w3.org/2000/09/xmldsig#sha1',
+      '',
+      '',
+      '',
+      true
+    );
+    
+    // Configurar la clave de firma
+    sig.signingKey = certBuffer;
+    
+    // Configurar la información del certificado
+    sig.keyInfoProvider = {
+      getKeyInfo: function() {
+        // Extraer el certificado en formato base64
+        const info = extraerInfoCertificado(certificatePath, certificatePassword);
+        const certPem = forge.pki.certificateToPem(info.certificate);
+        const certBase64 = certPem
+          .replace('-----BEGIN CERTIFICATE-----', '')
+          .replace('-----END CERTIFICATE-----', '')
+          .replace(/\r?\n/g, '');
+        
+        return `<X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data>`;
+      }
+    };
+    
+    // Firmar el documento
+    sig.computeSignature(xmlString);
+    
+    // Obtener el XML firmado
+    const signedXml = sig.getSignedXml();
+    
+    // Validar que el XML firmado sea válido
     try {
-      // Leer el certificado
-      const certBuffer = fs.readFileSync(certificatePath);
-      
-      // Crear el documento XML
-      const doc = new DOMParser().parseFromString(xmlString, 'text/xml');
-      
-      // Obtener el nodo raíz para firmar (factura, notaCredito, etc.)
-      const rootNodeName = doc.documentElement.nodeName;
-      const rootNode = doc.documentElement;
-      
-      if (!rootNode) {
-        throw new Error(`No se encontró el nodo raíz ${rootNodeName} en el XML`);
-      }
-      
-      // Configurar la firma
-      const sig = new SignedXml();
-      
-      // Configurar la referencia al nodo que se va a firmar
-      sig.addReference(
-        `//${rootNodeName}`,
-        [
-          'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-          'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
-        ],
-        'http://www.w3.org/2000/09/xmldsig#sha1',
-        '',
-        '',
-        '',
-        true
-      );
-      
-      // Configurar la clave de firma
-      sig.signingKey = certBuffer;
-      
-      // Configurar la información del certificado
-      sig.keyInfoProvider = {
-        getKeyInfo: function() {
-          // Extraer el certificado en formato base64
-          const info = extraerInfoCertificado(certificatePath, certificatePassword);
-          const certPem = forge.pki.certificateToPem(info.certificate);
-          const certBase64 = certPem
-            .replace('-----BEGIN CERTIFICATE-----', '')
-            .replace('-----END CERTIFICATE-----', '')
-            .replace(/\r?\n/g, '');
-          
-          return `<X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data>`;
-        }
-      };
-      
-      // Firmar el documento
-      sig.computeSignature(xmlString);
-      
-      // Obtener el XML firmado
-      const signedXml = sig.getSignedXml();
-      
-      // Validar que el XML firmado sea válido
-      try {
-        const validationDoc = new DOMParser().parseFromString(signedXml, 'text/xml');
-        return new XMLSerializer().serializeToString(validationDoc);
-      } catch (validationError) {
-        throw new Error(`Error al validar el XML firmado: ${validationError.message}`);
-      }
-    } catch (innerError) {
-      console.log('Error en el proceso de firma, devolviendo XML sin firmar:', innerError.message);
-      return xmlString; // En caso de error, devolvemos el XML sin firmar
+      const validationDoc = new DOMParser().parseFromString(signedXml, 'text/xml');
+      return new XMLSerializer().serializeToString(validationDoc);
+    } catch (validationError) {
+      throw new Error(`Error al validar el XML firmado: ${validationError.message}`);
     }
   } catch (error) {
     console.error('Error al firmar el XML:', error);
-    // En caso de error, devolvemos el XML sin firmar
-    console.log('Devolviendo XML sin firmar debido a error');
-    return xmlString;
+    throw new Error(`Error al firmar el XML: ${error.message}`);
   }
 }
 
