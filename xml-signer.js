@@ -186,8 +186,10 @@ async function signXml(xmlString, certificatePath, certificatePassword) {
 
     // Verificar que el certificado es válido
     const verificacion = verificarCertificado(certificatePath, certificatePassword);
+    console.log('Resultado de verificación del certificado:', JSON.stringify(verificacion, null, 2));
+    
     if (!verificacion.valido) {
-      throw new Error(`Certificado no válido: ${verificacion.razon}`);
+      throw new Error(`Certificado no válido: ${verificacion.razon || 'Razón desconocida'}`);
     }
     
     console.log(`Firmando XML con certificado de: ${verificacion.info.sujeto}`);

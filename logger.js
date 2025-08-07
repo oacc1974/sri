@@ -256,6 +256,7 @@ module.exports = {
   debug,
   info,
   warning,
+  warn: warning, // Alias para compatibilidad
   error,
   critical,
   transaccionSRI,
