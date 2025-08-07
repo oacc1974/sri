@@ -274,10 +274,35 @@ app.get('/api/certificado/verificar', async (req, res) => {
     }
     
     // Intentar extraer información del certificado
-    const { verificarCertificado } = require('./xml-signer');
+    const { verificarCertificado, extraerInfoCertificado } = require('./xml-signer');
     const infoCertificado = await verificarCertificado(certificadoFullPath, certificadoClave);
     
-    logger.info('Certificado digital verificado correctamente', { infoCertificado });
+    // Extraer información adicional si es necesario
+    if (!infoCertificado.info.rucTitular || !infoCertificado.info.nombreTitular) {
+      try {
+        const infoAdicional = extraerInfoCertificado(certificadoFullPath, certificadoClave);
+        // Asegurar que los campos requeridos existan
+        if (!infoCertificado.info.rucTitular && infoAdicional.rucTitular) {
+          infoCertificado.info.rucTitular = infoAdicional.rucTitular;
+        }
+        if (!infoCertificado.info.nombreTitular && infoAdicional.nombreTitular) {
+          infoCertificado.info.nombreTitular = infoAdicional.nombreTitular;
+        }
+        // Asegurar que esFirmaDigital esté definido
+        if (infoCertificado.esFirmaDigital === undefined) {
+          infoCertificado.esFirmaDigital = infoAdicional.esFirmaDigital || false;
+        }
+      } catch (extractError) {
+        logger.warn('Error al extraer información adicional del certificado', { error: extractError.message });
+      }
+    }
+    
+    // Log detallado para depuración
+    logger.info('Certificado digital verificado correctamente', { 
+      rucTitular: infoCertificado.info.rucTitular,
+      nombreTitular: infoCertificado.info.nombreTitular,
+      esFirmaDigital: infoCertificado.esFirmaDigital
+    });
     
     res.json({ 
       success: true, 

@@ -204,6 +204,7 @@ function extraerInfoCertificado(certificatePath, certificatePassword) {
  */
 async function verificarCertificado(certificatePath, certificatePassword) {
   try {
+    // Extraer información detallada del certificado
     const info = extraerInfoCertificado(certificatePath, certificatePassword);
     const ahora = new Date();
     
@@ -213,6 +214,8 @@ async function verificarCertificado(certificatePath, certificatePassword) {
     // Extraer datos específicos del sujeto y emisor
     const extraerDatos = (str) => {
       const datos = {};
+      if (!str || typeof str !== 'string') return datos;
+      
       const pares = str.split(',').map(s => s.trim());
       pares.forEach(par => {
         const [clave, ...valorArr] = par.split('=');
@@ -247,21 +250,32 @@ async function verificarCertificado(certificatePath, certificatePassword) {
       esFirmaDigital = false;
     }
     
+    // Asegurar que tengamos un RUC y nombre del titular
+    const nombreTitular = info.nombreTitular || datosSujeto.CN || 'Desconocido';
+    const rucTitular = info.rucTitular || 'No especificado';
+    
+    // Imprimir información de depuración
+    console.log('Información extraída del certificado:');
+    console.log(`- Nombre del titular: ${nombreTitular}`);
+    console.log(`- RUC del titular: ${rucTitular}`);
+    console.log(`- Es firma digital: ${esFirmaDigital ? 'Sí' : 'No'}`);
+    
+    // Construir y devolver la estructura de datos completa
     return {
       valido: esValido,
       razon: esValido ? `Certificado válido (${diasRestantes} días restantes)` : 'Certificado expirado',
       diasRestantes: diasRestantes,
       esFirmaDigital: esFirmaDigital,
       info: {
-        emisor: info.issuer,
-        emisorDatos: datosEmisor,
-        entidadCertificadora: datosEmisor.O || datosEmisor.CN || 'Desconocida',
-        sujeto: info.subject,
-        sujetoDatos: datosSujeto,
-        nombreTitular: info.nombreTitular || datosSujeto.CN || 'Desconocido',
-        rucTitular: info.rucTitular || 'No especificado',
-        validoDesde: info.validFrom,
-        validoHasta: info.validTo,
+        emisor: info.issuer || 'No disponible',
+        emisorDatos: datosEmisor || {},
+        entidadCertificadora: datosEmisor.O || datosEmisor.CN || info.issuer || 'Desconocida',
+        sujeto: info.subject || 'No disponible',
+        sujetoDatos: datosSujeto || {},
+        nombreTitular: nombreTitular,
+        rucTitular: rucTitular,
+        validoDesde: info.validFrom || new Date(0),
+        validoHasta: info.validTo || new Date(0),
         serialNumber: info.serialNumber || 'No disponible',
         algoritmoFirma: info.signatureAlgorithm || 'No disponible',
         huella: info.fingerPrint || 'No disponible'
@@ -269,10 +283,19 @@ async function verificarCertificado(certificatePath, certificatePassword) {
       advertencias: []
     };
   } catch (error) {
+    console.error('Error en verificarCertificado:', error);
+    // En caso de error, devolver una estructura con valores por defecto
     return {
       valido: false,
       razon: `Error al verificar el certificado: ${error.message}`,
-      info: null,
+      esFirmaDigital: false,
+      info: {
+        nombreTitular: 'Error al extraer datos',
+        rucTitular: 'Error al extraer datos',
+        entidadCertificadora: 'Desconocida',
+        validoDesde: null,
+        validoHasta: null
+      },
       error: error.message,
       advertencias: [`Error al procesar el certificado: ${error.message}`]
     };
