@@ -85,7 +85,20 @@ function generarXmlFactura(factura) {
   // Sanitizar textos para XML
   const razonSocial = sanitizarTextoXML(factura.razonSocial);
   const nombreComercial = sanitizarTextoXML(factura.nombreComercial);
-  const direccionEstablecimiento = sanitizarTextoXML(factura.direccionEstablecimiento);
+  
+  // Fallback seguro para dirEstablecimiento (nunca debe estar vacío según XSD SRI)
+  const dirEstInput = factura.direccionEstablecimiento;
+  const dirMatrizInput = factura.dirMatriz;
+  
+  // Usar dirEstablecimiento, si está vacío usar dirMatriz, si ambos están vacíos lanzar error
+  const dirEst = (dirEstInput && String(dirEstInput).trim()) || 
+                 (dirMatrizInput && String(dirMatrizInput).trim());
+                 
+  if (!dirEst) {
+    throw new Error("dirEstablecimiento requerido pero vacío (minLength=1). Debe proporcionar un valor válido para direccionEstablecimiento o dirMatriz.");
+  }
+  
+  const direccionEstablecimiento = sanitizarTextoXML(dirEst);
   const razonSocialComprador = sanitizarTextoXML(factura.cliente.razonSocial);
   const direccionComprador = sanitizarTextoXML(factura.cliente.direccion || '');
   const email = sanitizarTextoXML(factura.cliente.email || '');
