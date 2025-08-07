@@ -453,7 +453,7 @@
                                         </div>
                                         <div class="mt-3">
                                             <button class="btn btn-sm btn-primary btn-procesar-loyverse" 
-                                                    data-receipt-id="${index}">Procesar en SRI</button>
+                                                    data-receipt-id="${receipt.id}">Procesar en SRI</button>
                                         </div>
                                     </div>
                                 </div>
@@ -468,8 +468,8 @@
                     // Agregar event listeners a los botones de procesar
                     document.querySelectorAll('.btn-procesar-loyverse').forEach(btn => {
                         btn.addEventListener('click', async function() {
-                            const receiptIndex = parseInt(this.getAttribute('data-receipt-id'));
-                            const receipt = data.receipts[receiptIndex];
+                            const receiptId = this.getAttribute('data-receipt-id');
+                            const receipt = data.receipts.find(r => r.id === receiptId);
                             
                             if (!receipt) {
                                 alert('Error: No se encontró la factura seleccionada');

@@ -59,13 +59,39 @@ function extraerInfoCertificado(certificatePath, certificatePassword) {
     const validFrom = certificate.validity.notBefore;
     const validTo = certificate.validity.notAfter;
     
+    // Intentar extraer más información del certificado
+    let ruc = null;
+    let nombreTitular = null;
+    
+    // Buscar RUC en varios campos posibles
+    const camposRuc = ['serialNumber', 'UID', 'OID.2.5.4.45'];
+    for (const campo of camposRuc) {
+      const field = certificate.subject.getField(campo);
+      if (field) {
+        ruc = field.value;
+        break;
+      }
+    }
+    
+    // Buscar nombre del titular
+    const camposNombre = ['CN', 'O', 'OU', 'name'];
+    for (const campo of camposNombre) {
+      const field = certificate.subject.getField(campo);
+      if (field) {
+        nombreTitular = field.value;
+        break;
+      }
+    }
+    
     return {
       subject: subject ? subject.value : 'Desconocido',
       issuer: issuer ? issuer.value : 'Desconocido',
       validFrom: validFrom,
       validTo: validTo,
       privateKey: privateKey,
-      certificate: certificate
+      certificate: certificate,
+      rucTitular: ruc,
+      nombreTitular: nombreTitular
     };
   } catch (error) {
     console.error('Error al extraer información del certificado:', error);
@@ -123,8 +149,8 @@ async function verificarCertificado(certificatePath, certificatePassword) {
         entidadCertificadora: datosEmisor.O || datosEmisor.CN || 'Desconocida',
         sujeto: info.subject,
         sujetoDatos: datosSujeto,
-        nombreTitular: datosSujeto.CN || 'Desconocido',
-        rucTitular: datosSujeto.serialNumber || 'No especificado',
+        nombreTitular: info.nombreTitular || datosSujeto.CN || 'Desconocido',
+        rucTitular: info.rucTitular || datosSujeto.serialNumber || 'No especificado',
         validoDesde: info.validFrom,
         validoHasta: info.validTo,
         serialNumber: info.serialNumber || 'No disponible',
