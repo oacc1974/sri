@@ -367,15 +367,19 @@
                     
                     loyverseReceipts.forEach((receipt, index) => {
                         const customer = receipt.customer ? receipt.customer.name : 'Consumidor Final';
-                        const total = receipt.total_money ? receipt.total_money.gross_sales : 0;
+                        // Manejo seguro de valores nulos o indefinidos en total_money y gross_sales
+                        const total = receipt.total_money && receipt.total_money.gross_sales !== undefined ? 
+                            receipt.total_money.gross_sales : 
+                            (receipt.total_money && receipt.total_money.total !== undefined ? 
+                                receipt.total_money.total : 0);
                         const fecha = new Date(receipt.created_at).toLocaleString();
                         
                         tableHtml += `
                             <tr>
-                                <td>${receipt.receipt_number}</td>
+                                <td>${receipt.receipt_number || 'Sin número'}</td>
                                 <td>${fecha}</td>
                                 <td>${customer}</td>
-                                <td>$${total.toFixed(2)}</td>
+                                <td>$${typeof total === 'number' ? total.toFixed(2) : '0.00'}</td>
                                 <td>
                                     <button onclick="cargarFactura(${index})">Cargar</button>
                                     <button onclick="probarFirma(${index})">Probar Firma</button>
