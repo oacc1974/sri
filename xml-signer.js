@@ -9,24 +9,82 @@ const xmlCrypto = require('xml-crypto');
 const SignedXml = xmlCrypto.SignedXml;
 
 // Monkey patch para asegurar que addReference siempre use digestAlgorithm
+// Este patch es más agresivo y reemplaza completamente la implementación original
 const originalAddReference = SignedXml.prototype.addReference;
+
+// Definir algoritmos estándar para SRI Ecuador
+const SRI_DIGEST_ALGORITHM = 'http://www.w3.org/2001/04/xmlenc#sha256';
+const SRI_TRANSFORM = 'http://www.w3.org/2000/09/xmldsig#enveloped-signature';
+const SRI_C14N = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
+
+// Reemplazar completamente la función addReference
 SignedXml.prototype.addReference = function() {
+  console.log('Ejecutando monkey patch agresivo para addReference');
+  
   // Si es la API antigua (posicional)
-  if (arguments.length >= 3 && typeof arguments[0] === 'string' && Array.isArray(arguments[1])) {
-    if (!arguments[2] || arguments[2] === '') {
-      console.log('Aplicando patch: agregando digestAlgorithm SHA-256 a addReference (API posicional)');
-      arguments[2] = 'http://www.w3.org/2001/04/xmlenc#sha256';
+  if (arguments.length >= 1 && typeof arguments[0] === 'string') {
+    console.log('Detectada API posicional en addReference');
+    
+    // Asegurar que transforms sea un array
+    let transforms = arguments.length >= 2 && Array.isArray(arguments[1]) ? arguments[1] : [];
+    
+    // Si no hay transforms, agregar los estándar de SRI
+    if (transforms.length === 0) {
+      transforms = [SRI_TRANSFORM, SRI_C14N];
+      console.log('Agregando transforms estándar SRI');
     }
+    
+    // Forzar digestAlgorithm a SHA-256
+    const digestAlgorithm = SRI_DIGEST_ALGORITHM;
+    console.log(`Forzando digestAlgorithm a: ${digestAlgorithm}`);
+    
+    // Extraer otros parámetros opcionales
+    const uri = arguments.length >= 6 ? arguments[5] : '';
+    const id = arguments.length >= 4 ? arguments[3] : '';
+    const type = arguments.length >= 5 ? arguments[4] : '';
+    const inclusiveNamespacesPrefixList = arguments.length >= 7 ? arguments[6] : null;
+    
+    // Llamar a la implementación original con todos los parámetros explícitos
+    return originalAddReference.call(
+      this, 
+      arguments[0],       // xpath
+      transforms,         // transforms
+      digestAlgorithm,    // digestAlgorithm (forzado)
+      id,                 // id
+      type,               // type
+      uri,                // uri
+      inclusiveNamespacesPrefixList // inclusiveNamespacesPrefixList
+    );
   } 
   // Si es la API nueva (objeto de opciones)
   else if (arguments.length === 1 && typeof arguments[0] === 'object') {
-    if (!arguments[0].digestAlgorithm) {
-      console.log('Aplicando patch: agregando digestAlgorithm SHA-256 a addReference (API objeto)');
-      arguments[0].digestAlgorithm = 'http://www.w3.org/2001/04/xmlenc#sha256';
+    console.log('Detectada API de objeto en addReference');
+    
+    // Clonar el objeto para no modificar el original
+    const options = Object.assign({}, arguments[0]);
+    
+    // Forzar digestAlgorithm
+    options.digestAlgorithm = SRI_DIGEST_ALGORITHM;
+    console.log(`Forzando digestAlgorithm a: ${options.digestAlgorithm}`);
+    
+    // Asegurar que haya transforms
+    if (!options.transforms || !Array.isArray(options.transforms) || options.transforms.length === 0) {
+      options.transforms = [SRI_TRANSFORM, SRI_C14N];
+      console.log('Agregando transforms estándar SRI');
     }
+    
+    // Llamar a la implementación original con el objeto modificado
+    return originalAddReference.call(this, options);
   }
+  
+  // Fallback a la implementación original si no podemos manejar los argumentos
+  console.warn('Fallback a implementación original de addReference');
   return originalAddReference.apply(this, arguments);
 };
+
+// Verificar que el patch se aplicó correctamente
+console.log('Monkey patch para SignedXml.addReference aplicado correctamente');
+
 const xpath = require('xpath');
 const { DOMParser, XMLSerializer } = require('xmldom');
 const forge = require('node-forge');
