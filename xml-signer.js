@@ -641,9 +641,15 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       .replace('-----BEGIN CERTIFICATE-----', '')
       .replace('-----END CERTIFICATE-----', '')
       .replace(/\r?\n|\r/g, '');
-    // Configurar la información del certificado
+    
+    // Configurar la información del certificado con namespace correcto
+    // IMPORTANTE: Todos los elementos deben tener el prefijo ds: y estar en el namespace http://www.w3.org/2000/09/xmldsig#
     sig.keyInfoProvider = {
-      getKeyInfo: () => `<X509Data><X509Certificate>${x509Clean}</X509Certificate></X509Data>`
+      getKeyInfo: () => `
+        <ds:X509Data xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+          <ds:X509Certificate>${x509Clean}</ds:X509Certificate>
+        </ds:X509Data>
+      `.trim()
     };
     
     // Firmar el documento
