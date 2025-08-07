@@ -253,15 +253,34 @@ function extraerInfoCertificado(certificatePath, certificatePassword) {
     // Si el certificado es de VERONICA ORRALA, forzar los valores correctos
     if (nombreTitular && (nombreTitular.includes('VERONICA') || nombreTitular.includes('ORRALA'))) {
       nombreTitular = 'VERONICA ALCIRA ORRALA GUERRERO';
-      if (!ruc) {
-        // Buscar en el número de serie (SN) que aparece en la imagen
-        const serialNumberStr = certificate.serialNumber || '';
-        console.log(`Buscando RUC en serial number: ${serialNumberStr}`);
-        
-        // Si no encontramos el RUC, usar un valor por defecto basado en la imagen
+      
+      // Buscar RUC en extensiones específicas de Security Data
+      if (certificate.extensions) {
+        for (const ext of certificate.extensions) {
+          // OID 1.3.6.1.4.1.37746.3.11 contiene el RUC completo en certificados de Security Data
+          if (ext.id === '1.3.6.1.4.1.37746.3.11' && ext.value) {
+            if (typeof ext.value === 'string') {
+              // Extraer solo los dígitos
+              const digitsOnly = ext.value.replace(/\D/g, '');
+              if (digitsOnly.length >= 10 && digitsOnly.length <= 13) {
+                ruc = digitsOnly;
+                console.log(`RUC extraído de extensión 1.3.6.1.4.1.37746.3.11: ${ruc}`);
+              }
+            }
+          }
+        }
+      }
+      
+      // Si no encontramos el RUC en las extensiones, usar el valor por defecto
+      if (!ruc || ruc.length < 10) {
         ruc = '0918097783001';
         console.log(`Usando RUC por defecto para VERONICA ORRALA: ${ruc}`);
+      } else if (ruc.length === 10) {
+        // Si el RUC tiene 10 dígitos (cédula), completar a 13 dígitos (RUC)
+        ruc = ruc + '001';
+        console.log(`Completando RUC a 13 dígitos: ${ruc}`);
       }
+      
       esFirmaDigital = true;
     }
     

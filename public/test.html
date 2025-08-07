@@ -156,10 +156,16 @@
                         html += '<table class="table table-sm">';
                         html += '<tr><th>Titular</th><td>' + data.certificado.info.nombreTitular + '</td></tr>';
                         html += '<tr><th>RUC</th><td>' + data.certificado.info.rucTitular + '</td></tr>';
-                        html += '<tr><th>Entidad</th><td>' + data.certificado.info.entidadCertificadora + '</td></tr>';
-                        html += '<tr><th>Válido Desde</th><td>' + new Date(data.certificado.info.validoDesde).toLocaleDateString() + '</td></tr>';
-                        html += '<tr><th>Válido Hasta</th><td>' + new Date(data.certificado.info.validoHasta).toLocaleDateString() + '</td></tr>';
-                        html += '<tr><th>Días Restantes</th><td>' + data.certificado.diasRestantes + '</td></tr>';
+                        html += '<tr><th>Entidad</th><td>' + data.certificado.info.issuer + '</td></tr>';
+                        html += '<tr><th>Válido Desde</th><td>' + new Date(data.certificado.info.validFrom).toLocaleDateString() + '</td></tr>';
+                        html += '<tr><th>Válido Hasta</th><td>' + new Date(data.certificado.info.validTo).toLocaleDateString() + '</td></tr>';
+                        
+                        // Calcular días restantes
+                        const hoy = new Date();
+                        const validHasta = new Date(data.certificado.info.validTo);
+                        const diasRestantes = Math.ceil((validHasta - hoy) / (1000 * 60 * 60 * 24));
+                        
+                        html += '<tr><th>Días Restantes</th><td>' + diasRestantes + '</td></tr>';
                         html += '<tr><th>Es Firma Digital</th><td>' + (data.certificado.esFirmaDigital ? 'Sí' : 'No') + '</td></tr>';
                         html += '</table>';
                     }
