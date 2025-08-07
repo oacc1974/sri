@@ -790,9 +790,14 @@ app.post('/api/logs', (req, res) => {
   }
 });
 
-// Servir la aplicación React en producción
+// Redirigir a la página de prueba para rutas no encontradas
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  if (req.path !== '/' && !req.path.includes('.')) {
+    console.log(`Ruta no encontrada: ${req.path}, redirigiendo a /test.html`);
+    res.redirect('/test.html');
+  } else {
+    res.status(404).send('Página no encontrada');
+  }
 });
 
 // Puerto
