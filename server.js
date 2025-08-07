@@ -753,7 +753,7 @@ app.post('/api/test/firma-xml', async (req, res) => {
     
     // Verificar si existe el certificado digital
     const certificadoPath = process.env.CERTIFICADO_PATH;
-    const certificadoPassword = process.env.CERTIFICADO_PASSWORD;
+    const certificadoPassword = process.env.CERTIFICADO_CLAVE;
     const isBase64Env = process.env.CERTIFICADO_BASE64 ? true : false;
     const certPath = isBase64Env ? 'CERTIFICADO_BASE64' : certificadoPath;
     
