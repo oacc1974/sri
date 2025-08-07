@@ -15,6 +15,51 @@ const execPromise = util.promisify(exec);
 const { loadCertificate } = require('./cert-utils');
 
 /**
+ * Carga la clave privada y el certificado desde un archivo .p12
+ * Maneja tanto pkcs8ShroudedKeyBag como keyBag para mayor compatibilidad
+ * @param {string} p12Path - Ruta al archivo del certificado .p12
+ * @param {string} pass - Contraseña del certificado
+ * @returns {Object} - Clave privada y certificado en formato PEM
+ */
+function loadPemKeyAndCertFromP12(p12Path, pass) {
+  try {
+    console.log(`Cargando clave privada y certificado desde: ${p12Path}`);
+    const der = fs.readFileSync(p12Path, 'binary');
+    const p12Asn1 = forge.asn1.fromDer(der);
+    const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, pass);
+
+    // 1) Buscar la clave privada (primero en pkcs8ShroudedKeyBag, luego en keyBag)
+    let keyBag = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag];
+    if (!keyBag || keyBag.length === 0) {
+      console.log('No se encontró clave en pkcs8ShroudedKeyBag, buscando en keyBag...');
+      keyBag = p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag];
+    }
+    
+    if (!keyBag || keyBag.length === 0) {
+      throw new Error('No se encontró la clave privada en el certificado .p12');
+    }
+
+    const privateKeyObj = keyBag[0].key;
+    const privateKeyPem = forge.pki.privateKeyToPem(privateKeyObj); // PEM válido con headers
+    console.log('Clave privada extraída correctamente');
+
+    // 2) Buscar el certificado X.509
+    const certBag = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag];
+    if (!certBag || certBag.length === 0) {
+      throw new Error('No se encontró el certificado en el archivo .p12');
+    }
+
+    const certificatePem = forge.pki.certificateToPem(certBag[0].cert); // PEM con headers
+    console.log('Certificado extraído correctamente');
+
+    return { privateKeyPem, certificatePem };
+  } catch (error) {
+    console.error('Error al cargar clave y certificado desde .p12:', error);
+    throw new Error(`Error al cargar clave y certificado: ${error.message}`);
+  }
+}
+
+/**
  * Extrae información del certificado digital
  * @param {string} certificatePath - Ruta al archivo del certificado .p12 o nombre de variable de entorno
  * @param {string} certificatePassword - Contraseña del certificado
@@ -428,130 +473,70 @@ function verificarCertificado(certificatePath, certificatePassword, isBase64Env 
  */
 async function signXml(xmlString, certificatePath, certificatePassword, isBase64Env = false) {
   try {
-    // Usar la utilidad para cargar el certificado (desde archivo o variable de entorno)
-    const certInfo = loadCertificate(certificatePath, isBase64Env);
-    certificatePath = certInfo.path;
+    // Verificar el certificado primero
+    const certificadoInfo = await verificarCertificado(certificatePath, certificatePassword, isBase64Env);
     
-    console.log(`Certificado para firma cargado correctamente desde: ${certInfo.method}`);
-    console.log(`Ruta del certificado para firma: ${certificatePath}`);
+    if (!certificadoInfo.valido) {
+      console.warn(`Advertencia en certificado: ${certificadoInfo.razon}, pero se intentará firmar de todas formas`);
+    } else {
+      console.log('Certificado validado correctamente, procediendo a firmar XML...');
+    }
     
-    // Verificar que el certificado existe (debería existir si loadCertificate no lanzó error)
-    if (!fs.existsSync(certificatePath)) {
-      throw new Error(`Certificado para firma no encontrado en: ${certificatePath} (esto no debería ocurrir)`);
+    // Preparar la ruta del certificado
+    let actualCertPath = certificatePath;
+    if (isBase64Env) {
+      // Si es base64 desde variable de entorno
+      const p12Content = Buffer.from(process.env[certificatePath], 'base64');
+      const tmpPath = '/tmp/certificate.p12';
+      fs.writeFileSync(tmpPath, p12Content);
+      actualCertPath = tmpPath;
+      console.log(`Certificado base64 guardado temporalmente en: ${tmpPath}`);
     }
 
-    // Verificar que el certificado es válido
-    const verificacion = await verificarCertificado(certificatePath, certificatePassword);
-    console.log('Resultado de verificación del certificado:', JSON.stringify(verificacion, null, 2));
-    
-    // Aunque el certificado no sea válido, intentaremos firmar de todos modos en modo de prueba
-    // Solo registramos una advertencia
-    if (!verificacion.valido) {
-      console.warn(`Advertencia: ${verificacion.razon || 'Certificado potencialmente no válido'}. Intentando firmar de todos modos.`);
-    }
-    
-    console.log(`Firmando XML con certificado de: ${verificacion.info.sujeto}`);
-    
-    // Extraer la información del certificado para obtener la clave privada
-    const info = extraerInfoCertificado(certificatePath, certificatePassword);
-    
-    // Verificar que tenemos la clave privada
-    if (!info.privateKey) {
-      throw new Error('No se pudo extraer la clave privada del certificado');
-    }
-    
-    // Convertir la clave privada a formato PEM
-    const privateKeyPem = forge.pki.privateKeyToPem(info.privateKey);
-    
+    // Cargar la clave privada y certificado usando la nueva función
+    const { privateKeyPem, certificatePem } = loadPemKeyAndCertFromP12(actualCertPath, certificatePassword);
+
     // Crear el documento XML
     const doc = new DOMParser().parseFromString(xmlString, 'text/xml');
     
     // Obtener el nodo raíz para firmar (factura, notaCredito, etc.)
     const rootNodeName = doc.documentElement.nodeName;
-    const rootNode = doc.documentElement;
-    
-    if (!rootNode) {
-      throw new Error(`No se encontró el nodo raíz ${rootNodeName} en el XML`);
-    }
-    
-    // Configurar la firma
-    const sig = new SignedXml();
-    
-    // Configurar los algoritmos de firma y digest según requisitos del SRI (SHA-256)
-    sig.signatureAlgorithm = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
-    sig.canonicalizationAlgorithm = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315";
-    sig.digestAlgorithm = "http://www.w3.org/2001/04/xmlenc#sha256";
+    console.log(`Nodo raíz para firmar: ${rootNodeName}`);
+
+    // Configurar la firma con los algoritmos requeridos por el SRI
+    const sig = new SignedXml({
+      canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+      signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256'
+    });
     
     // Configurar la referencia al nodo que se va a firmar
-    // Pasamos el digestAlgorithm como string literal para evitar el error "digestAlgorithm is required"
-    try {
-      sig.addReference(
-        `//${rootNodeName}`,
-        [
-          'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-          'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
-        ],
-        "http://www.w3.org/2001/04/xmlenc#sha256"
-      );
-      console.log('Referencia agregada correctamente con digestAlgorithm: http://www.w3.org/2001/04/xmlenc#sha256');
-    } catch (error) {
-      console.error('Error al agregar referencia:', error);
-      
-      // Intento alternativo con otro formato de parámetros
-      console.log('Intentando método alternativo para agregar referencia...');
-      sig.addReference({
-        xpath: `//${rootNodeName}`,
-        transforms: [
-          'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-          'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
-        ],
-        digestAlgorithm: "http://www.w3.org/2001/04/xmlenc#sha256"
-      });
-      console.log('Referencia agregada correctamente con método alternativo');
-    }
+    // SIEMPRE especificar el digestAlgorithm para evitar el error "digestAlgorithm is required"
+    sig.addReference(
+      `//*[local-name(.)='${rootNodeName}']`,
+      [
+        'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+        'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+      ],
+      'http://www.w3.org/2001/04/xmlenc#sha256',  // Digest algorithm SIEMPRE especificado
+      '',  // id (opcional)
+      '',  // type (opcional)
+      '',  // uri (opcional)
+      true // forceUri
+    );
     
-    // Configurar la clave de firma usando la clave privada en formato PEM
-    try {
-      // Asegurarse de que la clave privada esté en el formato correcto
-      if (!privateKeyPem || !privateKeyPem.includes('-----BEGIN PRIVATE KEY-----')) {
-        console.error('La clave privada no está en formato PEM válido');
-        console.log('Intentando reformatear la clave privada...');
-        
-        // Intentar reformatear la clave si es necesario
-        if (info.privateKey) {
-          privateKeyPem = forge.pki.privateKeyToPem(info.privateKey);
-          console.log('Clave privada reformateada correctamente');
-        } else {
-          throw new Error('No se pudo obtener la clave privada del certificado');
-        }
-      }
-      
-      // Asignar la clave privada al objeto SignedXml
-      sig.signingKey = privateKeyPem;
-      console.log('Clave privada configurada correctamente');
-      
-      // Verificación adicional
-      if (!sig.signingKey) {
-        throw new Error('La clave de firma no se configuró correctamente');
-      }
-    } catch (error) {
-      console.error('Error al configurar la clave privada:', error);
-      throw new Error(`Error al configurar la clave privada: ${error.message}`);
-    }
+    // Asignar la clave privada en formato PEM completo (con headers)
+    sig.signingKey = privateKeyPem;
+    console.log('Clave privada configurada correctamente');
+    
+    // Extraer el certificado en formato base64 sin headers ni saltos de línea
+    const x509Clean = certificatePem
+      .replace('-----BEGIN CERTIFICATE-----', '')
+      .replace('-----END CERTIFICATE-----', '')
+      .replace(/\r?\n|\r/g, '');
     
     // Configurar la información del certificado
     sig.keyInfoProvider = {
-      getKeyInfo: function() {
-        // Extraer el certificado en formato base64
-        const info = extraerInfoCertificado(certificatePath, certificatePassword);
-        const certPem = forge.pki.certificateToPem(info.certificate);
-        const certBase64 = certPem
-          .replace('-----BEGIN CERTIFICATE-----', '')
-          .replace('-----END CERTIFICATE-----', '')
-          .replace(/\r?\n/g, '');
-        
-        return `<X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data>`;
-      }
+      getKeyInfo: () => `<X509Data><X509Certificate>${x509Clean}</X509Certificate></X509Data>`
     };
     
     // Firmar el documento
