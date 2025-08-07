@@ -484,14 +484,31 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     
     // Configurar la referencia al nodo que se va a firmar
     // Pasamos el digestAlgorithm como string literal para evitar el error "digestAlgorithm is required"
-    sig.addReference(
-      `//${rootNodeName}`,
-      [
-        'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-        'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
-      ],
-      "http://www.w3.org/2001/04/xmlenc#sha256"
-    );
+    try {
+      sig.addReference(
+        `//${rootNodeName}`,
+        [
+          'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+          'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+        ],
+        "http://www.w3.org/2001/04/xmlenc#sha256"
+      );
+      console.log('Referencia agregada correctamente con digestAlgorithm: http://www.w3.org/2001/04/xmlenc#sha256');
+    } catch (error) {
+      console.error('Error al agregar referencia:', error);
+      
+      // Intento alternativo con otro formato de parámetros
+      console.log('Intentando método alternativo para agregar referencia...');
+      sig.addReference({
+        xpath: `//${rootNodeName}`,
+        transforms: [
+          'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+          'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+        ],
+        digestAlgorithm: "http://www.w3.org/2001/04/xmlenc#sha256"
+      });
+      console.log('Referencia agregada correctamente con método alternativo');
+    }
     
     // Configurar la clave de firma usando la clave privada en formato PEM
     try {

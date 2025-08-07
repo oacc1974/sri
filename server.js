@@ -490,7 +490,23 @@ app.post('/api/factura', async (req, res) => {
     // Procesar comprobante (enviar, autorizar y guardar)
     const { procesarComprobante } = require('./sri-services');
     const ambiente = process.env.SRI_AMBIENTE;
-    const resultado = await procesarComprobante(xmlSigned, ambiente);
+    const certificadoClave = process.env.CERTIFICADO_CLAVE;
+    const certificadoBase64 = process.env.CERT_P12_BASE64;
+    
+    // Determinar si usar certificado desde variable de entorno o archivo
+    let certificadoPath;
+    let usarBase64 = false;
+    
+    if (certificadoBase64) {
+      certificadoPath = 'CERT_P12_BASE64';
+      usarBase64 = true;
+      logger.info('Usando certificado desde variable de entorno base64 para procesarComprobante');
+    } else {
+      certificadoPath = path.join(process.cwd(), process.env.CERTIFICADO_PATH);
+      logger.info(`Usando certificado desde archivo para procesarComprobante: ${certificadoPath}`);
+    }
+    
+    const resultado = await procesarComprobante(xmlSigned, certificadoPath, certificadoClave, ambiente, usarBase64);
     
     logger.info('Factura de prueba procesada correctamente', { resultado });
     
