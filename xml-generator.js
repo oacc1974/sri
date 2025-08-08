@@ -43,13 +43,28 @@ function generarClaveAcceso(params) {
   
   // Calcular dígito verificador (algoritmo módulo 11)
   let suma = 0;
+  // Verificar que los coeficientes tengan la misma longitud que la clave base
   const coeficientes = [2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7];
   
-  for (let i = 0; i < claveBase.length; i++) {
-    suma += parseInt(claveBase.charAt(i)) * coeficientes[i];
+  if (coeficientes.length !== claveBase.length) {
+    throw new Error(`Los coeficientes (${coeficientes.length}) deben tener la misma longitud que la clave base (${claveBase.length})`);
   }
   
-  const digitoVerificador = (11 - (suma % 11)) === 11 ? 0 : (11 - (suma % 11)) === 10 ? 1 : (11 - (suma % 11));
+  // Realizar la multiplicación y suma para cada dígito
+  for (let i = 0; i < claveBase.length; i++) {
+    const digito = parseInt(claveBase.charAt(i));
+    if (isNaN(digito)) {
+      throw new Error(`La clave de acceso contiene caracteres no numéricos en la posición ${i+1}`);
+    }
+    suma += digito * coeficientes[i];
+  }
+  
+  // Calcular el dígito verificador según el algoritmo oficial del SRI
+  // 11 - (suma % 11) = dígito verificador, con reglas especiales para 10 y 11
+  const modulo = suma % 11;
+  const digitoVerificador = (11 - modulo) === 11 ? 0 : (11 - modulo) === 10 ? 1 : (11 - modulo);
+  
+  console.log(`Suma: ${suma}, Módulo: ${modulo}, Dígito verificador calculado: ${digitoVerificador}`);
   
   // Clave de acceso completa
   const claveAcceso = `${claveBase}${digitoVerificador}`;
@@ -228,12 +243,22 @@ function generarXmlFactura(factura) {
   
   // pagos
   xmlString += '<pagos>\n';
-  factura.pagos.forEach(pago => {
+  // Verificar si hay pagos definidos, si no, crear un pago por defecto con el importe total
+  if (!factura.pagos || factura.pagos.length === 0) {
+    // Agregar un pago por defecto (01 = sin utilización del sistema financiero)
     xmlString += '<pago>\n';
-    xmlString += `<formaPago>${pago.formaPago}</formaPago>\n`;
-    xmlString += `<total>${pago.total.toFixed(2)}</total>\n`;
+    xmlString += '<formaPago>01</formaPago>\n';
+    xmlString += `<total>${factura.importeTotal.toFixed(2)}</total>\n`;
     xmlString += '</pago>\n';
-  });
+  } else {
+    // Usar los pagos definidos
+    factura.pagos.forEach(pago => {
+      xmlString += '<pago>\n';
+      xmlString += `<formaPago>${pago.formaPago}</formaPago>\n`;
+      xmlString += `<total>${pago.total.toFixed(2)}</total>\n`;
+      xmlString += '</pago>\n';
+    });
+  }
   xmlString += '</pagos>\n';
   xmlString += '</infoFactura>\n';
   
@@ -250,7 +275,9 @@ function generarXmlFactura(factura) {
     xmlString += `<cantidad>${item.cantidad.toFixed(2)}</cantidad>\n`;
     xmlString += `<precioUnitario>${item.precioUnitario.toFixed(2)}</precioUnitario>\n`;
     xmlString += `<descuento>${item.descuento.toFixed(2)}</descuento>\n`;
-    xmlString += `<precioTotalSinImpuesto>${item.precioTotalSinImpuestos.toFixed(2)}</precioTotalSinImpuesto>\n`;
+    // Calcular correctamente el precio total sin impuesto: cantidad × precioUnitario - descuento
+    const precioTotalSinImpuesto = (item.cantidad * item.precioUnitario - item.descuento).toFixed(2);
+    xmlString += `<precioTotalSinImpuesto>${precioTotalSinImpuesto}</precioTotalSinImpuesto>\n`;
     
     // impuestos
     xmlString += '<impuestos>\n';
