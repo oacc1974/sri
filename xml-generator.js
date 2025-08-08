@@ -68,18 +68,27 @@ function generarClaveAcceso(params) {
  * @returns {string} - XML de la factura
  */
 function generarXmlFactura(factura) {
-  // Formatear fecha en zona horaria de Ecuador (UTC-5)
-  // Usar la fecha actual si no se proporciona una fecha de emisión o si está en el futuro
+  // Obtener la fecha actual en zona horaria de Ecuador (UTC-5)
+  const fechaActualEcuador = moment().utcOffset('-05:00');
+  console.log(`Fecha actual en Ecuador: ${fechaActualEcuador.format('YYYY-MM-DD HH:mm:ss')} (UTC-5)`);
+  
+  // Inicializar la fecha de emisión
   let fechaEmisionMoment;
+  
   if (factura.fechaEmision) {
-    fechaEmisionMoment = moment(factura.fechaEmision);
-    // Si la fecha está en el futuro, usar la fecha actual
-    if (fechaEmisionMoment.isAfter(moment())) {
-      console.warn('Fecha de emisión en el futuro detectada, usando fecha actual');
-      fechaEmisionMoment = moment();
+    // Convertir la fecha proporcionada a zona horaria de Ecuador
+    fechaEmisionMoment = moment(factura.fechaEmision).utcOffset('-05:00');
+    console.log(`Fecha de emisión proporcionada: ${fechaEmisionMoment.format('YYYY-MM-DD HH:mm:ss')} (UTC-5)`);
+    
+    // Verificar si la fecha está en el futuro (comparando con la fecha actual en Ecuador)
+    if (fechaEmisionMoment.isAfter(fechaActualEcuador)) {
+      console.warn(`ADVERTENCIA: Fecha de emisión en el futuro detectada (${fechaEmisionMoment.format('YYYY-MM-DD')}), usando fecha actual de Ecuador`);
+      fechaEmisionMoment = moment(fechaActualEcuador);
     }
   } else {
-    fechaEmisionMoment = moment();
+    // Si no se proporciona fecha, usar la fecha actual de Ecuador
+    fechaEmisionMoment = moment(fechaActualEcuador);
+    console.log('No se proporcionó fecha de emisión, usando fecha actual de Ecuador');
   }
   
   // Asegurar que estamos en zona horaria de Ecuador (UTC-5)
@@ -95,16 +104,28 @@ function generarXmlFactura(factura) {
   console.log(`Fecha de emisión generada: ${fechaEmision} (Ecuador UTC-5)`);
   console.log(`Fecha para clave de acceso: ${fechaParaClave}`);
   
-  // Generar clave de acceso con la misma fecha procesada
+  // Validar el ambiente (1=pruebas, 2=producción)
+  // Asegurarse de que sea un valor válido para el SRI
+  let ambiente = factura.ambiente;
+  if (ambiente !== '1' && ambiente !== '2') {
+    console.warn(`Ambiente inválido: ${ambiente}, usando ambiente de pruebas (1) por defecto`);
+    ambiente = '1'; // Valor por defecto: pruebas
+  }
+  console.log(`Ambiente configurado: ${ambiente === '1' ? 'PRUEBAS' : 'PRODUCCIÓN'}`);
+  
+  // Generar clave de acceso con la misma fecha procesada y ambiente validado
   const claveAcceso = generarClaveAcceso({
     fechaEmision: fechaParaClave,
     tipoComprobante: '01', // 01: Factura
     ruc: factura.ruc,
-    ambiente: factura.ambiente,
+    ambiente: ambiente, // Usar el ambiente validado
     serie: `${factura.establecimiento}${factura.puntoEmision}`,
     secuencial: factura.secuencial,
     tipoEmision: factura.tipoEmision
   });
+  
+  // Guardar el ambiente validado para usarlo en el XML
+  factura.ambiente = ambiente;
   
   // Sanitizar textos para XML
   const razonSocial = sanitizarTextoXML(factura.razonSocial);

@@ -500,39 +500,64 @@ app.post('/api/factura', async (req, res) => {
       
       // Procesar items
       if (Array.isArray(datosFactura.factura.items)) {
-        facturaPreparada.items = datosFactura.factura.items.map(item => ({
-          codigoPrincipal: item.codigoPrincipal || 'SIN CODIGO',
-          descripcion: item.descripcion || 'Producto/Servicio',
-          cantidad: parseFloat(item.cantidad || 1),
-          precioUnitario: parseFloat(item.precioUnitario || 0),
-          descuento: parseFloat(item.descuento || 0),
-          precioTotalSinImpuestos: parseFloat(item.precioTotalSinImpuestos || 0),
-          impuestos: Array.isArray(item.impuestos) ? item.impuestos.map(imp => ({
-            codigo: imp.codigo || '2',
-            codigoPorcentaje: imp.codigoPorcentaje || '2',
-            baseImponible: parseFloat(imp.baseImponible || 0),
-            valor: parseFloat(imp.valor || 0)
-          })) : [{
-            codigo: '2',
-            codigoPorcentaje: '2',
-            baseImponible: parseFloat(item.precioTotalSinImpuestos || 0),
-            valor: parseFloat(item.precioTotalSinImpuestos || 0) * 0.12
-          }]
-        }));
+        facturaPreparada.items = datosFactura.factura.items.map(item => {
+          // Calcular correctamente el precio total sin impuestos (cantidad * precioUnitario - descuento)
+          const cantidad = parseFloat(item.cantidad || 1);
+          const precioUnitario = parseFloat(item.precioUnitario || 0);
+          const descuento = parseFloat(item.descuento || 0);
+          
+          // CORRECCIÓN CRÍTICA: Calcular el precio total sin impuestos correctamente
+          // Este valor debe ser igual a (cantidad * precioUnitario - descuento)
+          const precioTotalSinImpuestos = (cantidad * precioUnitario) - descuento;
+          
+          console.log(`Calculando precio total sin impuestos: ${cantidad} * ${precioUnitario} - ${descuento} = ${precioTotalSinImpuestos}`);
+          
+          return {
+            codigoPrincipal: item.codigoPrincipal || 'SIN CODIGO',
+            descripcion: item.descripcion || 'Producto/Servicio',
+            cantidad: cantidad,
+            precioUnitario: precioUnitario,
+            descuento: descuento,
+            // Usar el valor calculado, no el proporcionado (que podría ser incorrecto)
+            precioTotalSinImpuestos: precioTotalSinImpuestos,
+            impuestos: Array.isArray(item.impuestos) ? item.impuestos.map(imp => {
+              // Asegurar que la base imponible sea igual al precio total sin impuestos
+              return {
+                codigo: imp.codigo || '2',
+                codigoPorcentaje: imp.codigoPorcentaje || '2',
+                baseImponible: precioTotalSinImpuestos, // Usar el valor calculado
+                valor: imp.codigoPorcentaje === '2' ? precioTotalSinImpuestos * 0.12 : 0 // 12% para IVA
+              };
+            }) : [{
+              codigo: '2',
+              codigoPorcentaje: '2',
+              baseImponible: precioTotalSinImpuestos, // Usar el valor calculado
+              valor: precioTotalSinImpuestos * 0.12 // 12% para IVA
+            }]
+          };
+        });
       } else {
         // Crear al menos un item por defecto
+        const importeTotal = parseFloat(datosFactura.factura.importeTotal || 0);
+        // Para el caso de un ítem por defecto, calculamos el precio unitario sin IVA
+        // Asumiendo que el importeTotal incluye IVA (12%)
+        const precioUnitarioSinIVA = importeTotal / 1.12;
+        
+        console.log(`Calculando precio unitario sin IVA para ítem por defecto: ${importeTotal} / 1.12 = ${precioUnitarioSinIVA}`);
+        
         facturaPreparada.items = [{
           codigoPrincipal: 'SIN CODIGO',
           descripcion: 'Producto/Servicio por defecto',
           cantidad: 1,
-          precioUnitario: parseFloat(datosFactura.factura.importeTotal || 0),
+          precioUnitario: precioUnitarioSinIVA, // Precio unitario sin IVA
           descuento: 0,
-          precioTotalSinImpuestos: parseFloat(datosFactura.factura.importeTotal || 0),
+          // El precio total sin impuestos debe ser igual al precio unitario sin IVA (cantidad=1, descuento=0)
+          precioTotalSinImpuestos: precioUnitarioSinIVA,
           impuestos: [{
             codigo: '2',
             codigoPorcentaje: '2',
-            baseImponible: parseFloat(datosFactura.factura.importeTotal || 0),
-            valor: parseFloat(datosFactura.factura.importeTotal || 0) * 0.12
+            baseImponible: precioUnitarioSinIVA, // Base imponible = precio sin IVA
+            valor: precioUnitarioSinIVA * 0.12 // 12% de IVA
           }]
         }];
       }
