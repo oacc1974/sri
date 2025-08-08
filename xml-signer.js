@@ -702,6 +702,22 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       let xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
       const rootElement = xmlDoc.documentElement;
       
+      // IMPORTANTE: Eliminar cualquier firma existente antes de firmar
+      // Buscar y eliminar todos los nodos ds:Signature para evitar firmas duplicadas
+      const existingSignatures = xpath.select("//ds:Signature | //Signature", xmlDoc, true);
+      if (existingSignatures && existingSignatures.length > 0) {
+        console.log(`Se encontraron ${existingSignatures.length} firmas existentes. Eliminando todas las firmas antes de firmar...`);
+        for (let i = 0; i < existingSignatures.length; i++) {
+          const signatureNode = existingSignatures[i];
+          if (signatureNode && signatureNode.parentNode) {
+            signatureNode.parentNode.removeChild(signatureNode);
+            console.log(`Firma #${i+1} eliminada correctamente`);
+          }
+        }
+      } else {
+        console.log('No se encontraron firmas existentes en el XML');
+      }
+      
       // Asegurar que los nodos estén en el orden correcto según XSD SRI:
       // 1. infoTributaria
       // 2. infoFactura

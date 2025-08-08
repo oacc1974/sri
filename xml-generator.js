@@ -285,7 +285,22 @@ function generarXmlFactura(factura) {
       xmlString += '<impuesto>\n';
       xmlString += `<codigo>${imp.codigo}</codigo>\n`;
       xmlString += `<codigoPorcentaje>${imp.codigoPorcentaje}</codigoPorcentaje>\n`;
-      xmlString += `<tarifa>${imp.codigoPorcentaje === '2' ? '12.00' : '0.00'}</tarifa>\n`;
+      // Usar la tarifa proporcionada en el impuesto o determinarla según el codigoPorcentaje
+      // codigoPorcentaje '2' = IVA tarifa 12%
+      // codigoPorcentaje '3' = IVA tarifa 14%
+      // codigoPorcentaje '8' = IVA tarifa 15%
+      let tarifaIva = '0.00';
+      if (imp.tarifa) {
+        // Si el impuesto tiene una tarifa definida explícitamente, usarla
+        tarifaIva = typeof imp.tarifa === 'number' ? imp.tarifa.toFixed(2) : imp.tarifa;
+      } else if (imp.codigoPorcentaje === '2') {
+        tarifaIva = '12.00';
+      } else if (imp.codigoPorcentaje === '3') {
+        tarifaIva = '14.00';
+      } else if (imp.codigoPorcentaje === '8') {
+        tarifaIva = '15.00';
+      }
+      xmlString += `<tarifa>${tarifaIva}</tarifa>\n`;
       xmlString += `<baseImponible>${imp.baseImponible.toFixed(2)}</baseImponible>\n`;
       xmlString += `<valor>${imp.valor.toFixed(2)}</valor>\n`;
       xmlString += '</impuesto>\n';
