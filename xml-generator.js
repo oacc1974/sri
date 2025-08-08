@@ -79,8 +79,27 @@ function generarXmlFactura(factura) {
     tipoEmision: factura.tipoEmision
   });
   
-  // Formatear fecha
-  const fechaEmision = moment(factura.fechaEmision).format('DD/MM/YYYY');
+  // Formatear fecha en zona horaria de Ecuador (UTC-5)
+  // Usar la fecha actual si no se proporciona una fecha de emisión o si está en el futuro
+  let fechaEmisionMoment;
+  if (factura.fechaEmision) {
+    fechaEmisionMoment = moment(factura.fechaEmision);
+    // Si la fecha está en el futuro, usar la fecha actual
+    if (fechaEmisionMoment.isAfter(moment())) {
+      console.warn('Fecha de emisión en el futuro detectada, usando fecha actual');
+      fechaEmisionMoment = moment();
+    }
+  } else {
+    fechaEmisionMoment = moment();
+  }
+  
+  // Asegurar que estamos en zona horaria de Ecuador (UTC-5)
+  fechaEmisionMoment.utcOffset('-05:00');
+  
+  // Formatear fecha en formato DD/MM/YYYY como requiere el SRI
+  const fechaEmision = fechaEmisionMoment.format('DD/MM/YYYY');
+  
+  console.log(`Fecha de emisión generada: ${fechaEmision} (Ecuador UTC-5)`);
   
   // Sanitizar textos para XML
   const razonSocial = sanitizarTextoXML(factura.razonSocial);
