@@ -610,20 +610,34 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // Configurar la referencia al nodo que se va a firmar
     // SIEMPRE especificar el digestAlgorithm para evitar el error "digestAlgorithm is required"
     
-    // Verificar si el documento tiene el atributo Id="comprobante" en el nodo raíz
+    // Verificar si el documento tiene el atributo id="comprobante" en el nodo raíz
     // Si no lo tiene, lo agregamos para cumplir con el estándar SRI
+    // IMPORTANTE: El SRI requiere que sea 'id' en minúscula, no 'Id' ni 'ID'
     const rootNode = doc.documentElement;
-    if (!rootNode.hasAttribute('Id') && !rootNode.hasAttribute('id')) {
-      rootNode.setAttribute('Id', 'comprobante');
-      console.log(`Se agregó el atributo Id="comprobante" al nodo raíz ${rootNodeName}`);
+    
+    // Eliminar cualquier atributo Id o ID que pueda existir (para evitar conflictos)
+    if (rootNode.hasAttribute('Id')) {
+      rootNode.removeAttribute('Id');
+      console.log(`Se eliminó el atributo 'Id' del nodo raíz ${rootNodeName} (debe ser minúscula)`);
+    }
+    if (rootNode.hasAttribute('ID')) {
+      rootNode.removeAttribute('ID');
+      console.log(`Se eliminó el atributo 'ID' del nodo raíz ${rootNodeName} (debe ser minúscula)`);
     }
     
-    // Usar referencia por Id (más compatible con SRI)
-    console.log('Configurando referencia por Id="comprobante" para SRI');
+    // Agregar el atributo id="comprobante" (minúscula) como requiere el SRI
+    if (!rootNode.hasAttribute('id')) {
+      rootNode.setAttribute('id', 'comprobante');
+      console.log(`Se agregó el atributo id="comprobante" al nodo raíz ${rootNodeName} (minúscula)`);
+    }
+    
+    // Usar referencia por id (minúscula) como requiere el SRI
+    console.log('Configurando referencia por id="comprobante" (minúscula) para SRI');
     
     // Agregar la referencia con el digestAlgorithm explícito (API clásica posicional)
+    // IMPORTANTE: El selector XPath debe usar @id (minúscula) como requiere el SRI
     sig.addReference(
-      "//*[@Id='comprobante']",
+      "//*[local-name()='factura' and @id='comprobante']",  // XPath exacto requerido por SRI
       [TRANSFORM, C14N],
       DIGEST,          // digestAlgorithm - REQUERIDO
       '',              // id (opcional)
@@ -666,17 +680,29 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
         console.log('Agregado namespace xmlns:ds="http://www.w3.org/2000/09/xmldsig#" al nodo raíz');
       }
       
+      // Verificar que el XML tiene la estructura correcta antes de firmar
+      console.log('Verificando estructura del XML antes de firmar...');
+      try {
+        // Verificar que exista el nodo <detalles> (obligatorio según XSD SRI)
+        const detallesNodes = xpath.select(`//${rootNodeName}/detalles`, doc);
+        if (detallesNodes.length === 0) {
+          console.error('ERROR: El XML no contiene el nodo <detalles> que es obligatorio según el XSD del SRI');
+          throw new Error('El XML no cumple con la estructura requerida: falta el nodo <detalles>');
+        }
+        console.log('Estructura del XML verificada: nodo <detalles> encontrado');
+      } catch (structError) {
+        console.error('Error al verificar la estructura del XML:', structError);
+        throw new Error(`El XML no cumple con la estructura requerida por el SRI: ${structError.message}`);
+      }
+      
       // Colocar la firma como ÚLTIMO hijo del nodo raíz (factura, notaCredito, etc.) como requiere el XSD del SRI
+      console.log('Insertando firma como ÚLTIMO hijo del nodo raíz para cumplir XSD SRI');
       sig.computeSignature(xmlString, {
         location: {
           reference: `/*[local-name()='${rootNodeName}']`,  // Selector XPath dinámico para el nodo raíz
-          action: "append"   // Agregar como Último hijo del nodo raíz
+          action: "append"   // Agregar como Último hijo del nodo raíz (CLAVE para SRI)
         },
-        prefix: "ds",         // Usar prefijo ds: para la firma (<ds:Signature>)
-        attrs: {
-          'Id': 'Signature',
-          'xmlns:ds': 'http://www.w3.org/2000/09/xmldsig#'
-        }
+        prefix: "ds"          // Usar prefijo ds: para la firma (<ds:Signature>)
       });
       console.log('XML firmado correctamente');
       
