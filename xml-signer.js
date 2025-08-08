@@ -577,7 +577,7 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // Cargar la clave privada y certificado usando la nueva función
     const { privateKeyPem, certificatePem } = loadPemKeyAndCertFromP12(actualCertPath, certificatePassword);
 
-    // Crear el documento XML
+    // *** Declarar primero y una sola vez el documento XML ***
     const doc = new DOMParser().parseFromString(xmlString, 'text/xml');
     
     // Obtener el nodo raíz para firmar (factura, notaCredito, etc.)
@@ -607,47 +607,35 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // MUY importante en xml-crypto para que reconozca Id/ID/id
     sig.idAttributes = ['Id', 'ID', 'id'];
     
-    // Configurar la referencia al nodo que se va a firmar
-    // SIEMPRE especificar el digestAlgorithm para evitar el error "digestAlgorithm is required"
-    
-    // IMPORTANTE: Configurar correctamente el atributo ID para la referencia de firma
-    // El SRI y xml-crypto pueden tener diferentes requisitos para el atributo ID
-    // Vamos a usar 'Id' con mayúscula inicial que es más compatible con xml-crypto y otras librerías
+    // Asegurar el namespace ds en el nodo raíz
     const rootNode = doc.documentElement;
     
-    // Eliminar cualquier atributo id, Id o ID que pueda existir para evitar conflictos
-    if (rootNode.hasAttribute('id')) {
-      rootNode.removeAttribute('id');
-      console.log(`Se eliminó el atributo 'id' del nodo raíz ${rootNodeName}`);
-    }
-    if (rootNode.hasAttribute('ID')) {
-      rootNode.removeAttribute('ID');
-      console.log(`Se eliminó el atributo 'ID' del nodo raíz ${rootNodeName}`);
-    }
-    if (rootNode.hasAttribute('Id')) {
-      rootNode.removeAttribute('Id');
-      console.log(`Se eliminó el atributo 'Id' del nodo raíz ${rootNodeName}`);
+    // Asegura el id correcto (minúsculas como espera el SRI)
+    if (!rootNode.getAttribute('id')) {
+      rootNode.setAttribute('id', 'comprobante');
+      console.log(`Se agregó el atributo id="comprobante" al nodo raíz ${rootNodeName} (minúsculas como espera el SRI)`);
     }
     
-    // Agregar el atributo Id="comprobante" (con mayúscula inicial) para mayor compatibilidad
-    rootNode.setAttribute('Id', 'comprobante');
-    console.log(`Se agregó el atributo Id="comprobante" al nodo raíz ${rootNodeName} (con mayúscula inicial)`);
+    // Namespace de firma (en root, una sola vez)
+    if (!rootNode.getAttribute('xmlns:ds')) {
+      rootNode.setAttribute('xmlns:ds', 'http://www.w3.org/2000/09/xmldsig#');
+      console.log('Se agregó el namespace xmlns:ds al nodo raíz');
+    }
     
-    // Actualizar el xmlString con el ID configurado
-    xmlString = new XMLSerializer().serializeToString(doc); // Usar doc en lugar de xmlDoc
+    // Actualizar el xmlString con el ID y namespace configurados
+    xmlString = new XMLSerializer().serializeToString(doc);
     
-    // Usar referencia por Id (con mayúscula inicial) para mayor compatibilidad con xml-crypto
-    console.log('Configurando referencia por Id="comprobante" (con mayúscula inicial)');
+    // Referencia por @id y transform enveloped
+    console.log('Configurando referencia por @id="comprobante" y transform enveloped');
     
-    // Agregar la referencia con el digestAlgorithm explícito (API clásica posicional)
-    // IMPORTANTE: El selector XPath debe coincidir con el atributo Id que configuramos
+    // Agregar la referencia con el digestAlgorithm explícito
     sig.addReference(
-      `//*[local-name()='${rootNodeName}' and @Id='comprobante']`,  // XPath dinámico con @Id
-      [TRANSFORM, C14N],
-      DIGEST,          // digestAlgorithm - REQUERIDO
+      "//*[local-name()='factura' and @id='comprobante']",
+      ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
+      'http://www.w3.org/2001/04/xmlenc#sha256',
       '',              // id (opcional)
       '',              // type (opcional)
-      '#comprobante',  // URI explícita
+      '',              // URI (opcional)
       true             // forceUri
     );
     
@@ -682,17 +670,9 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       // Este paso es fundamental para evitar el error "Cannot resolve QName ds"
       const rootNode = doc.documentElement;
       
-      // Eliminar cualquier declaración existente para evitar duplicados
-      if (rootNode.hasAttribute('xmlns:ds')) {
-        rootNode.removeAttribute('xmlns:ds');
-      }
-      
-      // Agregar el namespace ds en el nodo raíz (SIEMPRE debe estar aquí, no en la firma)
-      rootNode.setAttribute('xmlns:ds', 'http://www.w3.org/2000/09/xmldsig#');
-      console.log('Namespace xmlns:ds="http://www.w3.org/2000/09/xmldsig#" configurado correctamente en el nodo raíz');
-      
-      // Actualizar el xmlString con el namespace agregado
-      xmlString = new XMLSerializer().serializeToString(xmlDoc);
+      // El namespace ds ya se agregó anteriormente, no necesitamos hacerlo de nuevo
+      // Actualizar el xmlString con todos los cambios realizados hasta ahora
+      xmlString = new XMLSerializer().serializeToString(doc);
       
       // Verificar que el XML tiene la estructura correcta antes de firmar
       console.log('Verificando estructura del XML antes de firmar...');
@@ -765,7 +745,7 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       console.log('Insertando firma como ÚLTIMO hijo del nodo raíz para cumplir XSD SRI');
       sig.computeSignature(xmlString, {
         location: {
-          reference: `/*[local-name()='${rootNodeName}']`,  // Selector XPath dinámico para el nodo raíz
+          reference: "/*[local-name()='factura']",  // Selector XPath específico para el nodo factura
           action: "append"   // Agregar como Último hijo del nodo raíz (CLAVE para SRI)
         },
         prefix: "ds"          // Usar prefijo ds: para la firma (<ds:Signature>)
