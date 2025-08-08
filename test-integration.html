@@ -127,6 +127,49 @@
         .estado-ERROR {
             background-color: #6c757d;
         }
+        .estado-FIRMADO {
+            background-color: #0dcaf0;
+        }
+        .log-container {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 15px;
+            background-color: #f8f9fa;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .log-error {
+            color: #dc3545;
+        }
+        .log-warning {
+            color: #ffc107;
+        }
+        .log-info {
+            color: #0d6efd;
+        }
+        .log-success {
+            color: #198754;
+        }
+        .log-timestamp {
+            color: #6c757d;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        .log-data {
+            background-color: #f1f1f1;
+            padding: 5px;
+            border-radius: 3px;
+            margin: 5px 0;
+            display: block;
+        }
         .comprobante-card {
             border: 1px solid #dee2e6;
             border-radius: 4px;
@@ -250,12 +293,12 @@
             <div class="filter-controls" style="margin-bottom: 15px;">
                 <label>Filtrar por estado:</label>
                 <select id="estado-filter">
-                    <option value="">Todos</option>
-                    <option value="AUTORIZADO">Autorizado</option>
-                    <option value="RECIBIDO">Recibido</option>
-                    <option value="RECHAZADO">Rechazado</option>
-                    <option value="PENDIENTE">Pendiente</option>
-                    <option value="ERROR">Error</option>
+                    <option value="">Todos los estados</option>
+                    <option value="FIRMADO">FIRMADO</option>
+                    <option value="RECIBIDO">RECIBIDO</option>
+                    <option value="AUTORIZADO">AUTORIZADO</option>
+                    <option value="RECHAZADO">RECHAZADO</option>
+                    <option value="ERROR">ERROR</option>
                 </select>
                 <button id="refresh-comprobantes">Actualizar</button>
             </div>
@@ -264,6 +307,21 @@
             </div>
             <div class="result" id="comprobantes-result">
                 <!-- Lista de comprobantes -->
+            </div>
+            <div class="log-container" id="comprobantes-logs">
+                <h4>Logs de Procesamiento</h4>
+                <div class="log-entry log-error">"stack": "Error: Error al firmar el XML: Error al firmar el XML: Cannot resolve QName ds:"</div>
+                <div class="log-entry log-warning"><span class="log-timestamp">[2025-08-08 00:01:57.272]</span> [WARNING] No se pudo firmar el XML, continuando...</div>
+                <div class="log-entry">DATA: {</div>
+                <div class="log-entry log-error">"error": "Error al firmar el XML: Error al firmar el XML: Cannot resolve QName ds:"</div>
+                <div class="log-entry">}</div>
+                <div class="log-entry log-info"><span class="log-timestamp">[2025-08-08 00:01:57.272]</span> [INFO] Usando certificado desde archivo para procesar</div>
+                <div class="log-entry log-info"><span class="log-timestamp">[2025-08-08 00:01:57.272]</span> [INFO] Verificando certificado desde archivo: /app/certificados/certificado.p12</div>
+                <div class="log-entry log-info"><span class="log-timestamp">[2025-08-08 00:02:01.070]</span> [INFO] Firmando el XML para comprobante con clave: 1234567890</div>
+                <div class="log-entry log-success"><span class="log-timestamp">[2025-08-08 00:02:08.264]</span> [INFO] Factura de prueba procesada correctamente</div>
+                <div class="log-entry">DATA: {</div>
+                <div class="log-entry">"resultado": 1</div>
+                <div class="log-entry">}</div>
             </div>
         </div>
         
