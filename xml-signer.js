@@ -668,9 +668,6 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       
       // CRÍTICO: Asegurar que el documento XML tenga el namespace ds declarado en el nodo raíz ANTES de firmar
       // Este paso es fundamental para evitar el error "Cannot resolve QName ds"
-      const rootNode = doc.documentElement;
-      
-      // El namespace ds ya se agregó anteriormente, no necesitamos hacerlo de nuevo
       // Actualizar el xmlString con todos los cambios realizados hasta ahora
       xmlString = new XMLSerializer().serializeToString(doc);
       
@@ -692,13 +689,9 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       // Verificar el orden de los nodos hijos según XSD SRI
       console.log('Verificando y ajustando el orden de los nodos para cumplir XSD SRI...');
       
-      // Obtener el documento XML como string para manipularlo antes de firmar
-      let xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
-      const rootElement = xmlDoc.documentElement;
-      
       // IMPORTANTE: Eliminar cualquier firma existente antes de firmar
       // Buscar y eliminar todos los nodos ds:Signature para evitar firmas duplicadas
-      const existingSignatures = xpath.select("//ds:Signature | //Signature", xmlDoc, true);
+      const existingSignatures = xpath.select("//ds:Signature | //Signature", doc, true);
       if (existingSignatures && existingSignatures.length > 0) {
         console.log(`Se encontraron ${existingSignatures.length} firmas existentes. Eliminando todas las firmas antes de firmar...`);
         for (let i = 0; i < existingSignatures.length; i++) {
@@ -720,25 +713,26 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       // 5. ds:Signature (será agregado al final)
       
       // Reorganizar nodos si es necesario
-      const infoTributaria = rootElement.getElementsByTagName('infoTributaria')[0];
-      const infoFactura = rootElement.getElementsByTagName('infoFactura')[0];
-      const detalles = rootElement.getElementsByTagName('detalles')[0];
-      const infoAdicional = rootElement.getElementsByTagName('infoAdicional')[0];
+      const docElement = doc.documentElement;
+      const infoTributaria = docElement.getElementsByTagName('infoTributaria')[0];
+      const infoFactura = docElement.getElementsByTagName('infoFactura')[0];
+      const detalles = docElement.getElementsByTagName('detalles')[0];
+      const infoAdicional = docElement.getElementsByTagName('infoAdicional')[0];
       
       // Remover todos los nodos principales para reordenarlos
-      if (infoTributaria) rootElement.removeChild(infoTributaria);
-      if (infoFactura) rootElement.removeChild(infoFactura);
-      if (detalles) rootElement.removeChild(detalles);
-      if (infoAdicional) rootElement.removeChild(infoAdicional);
+      if (infoTributaria) docElement.removeChild(infoTributaria);
+      if (infoFactura) docElement.removeChild(infoFactura);
+      if (detalles) docElement.removeChild(detalles);
+      if (infoAdicional) docElement.removeChild(infoAdicional);
       
       // Agregar en el orden correcto según XSD SRI
-      if (infoTributaria) rootElement.appendChild(infoTributaria);
-      if (infoFactura) rootElement.appendChild(infoFactura);
-      if (detalles) rootElement.appendChild(detalles);
-      if (infoAdicional) rootElement.appendChild(infoAdicional);
+      if (infoTributaria) docElement.appendChild(infoTributaria);
+      if (infoFactura) docElement.appendChild(infoFactura);
+      if (detalles) docElement.appendChild(detalles);
+      if (infoAdicional) docElement.appendChild(infoAdicional);
       
       // Convertir de nuevo a string con el orden correcto
-      xmlString = new XMLSerializer().serializeToString(rootElement.ownerDocument);
+      xmlString = new XMLSerializer().serializeToString(doc);
       console.log('XML reordenado correctamente según XSD SRI');
       
       // Colocar la firma como ÚLTIMO hijo del nodo raíz (factura, notaCredito, etc.) como requiere el XSD del SRI

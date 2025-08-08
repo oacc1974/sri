@@ -74,6 +74,105 @@
             color: #198754;
             font-weight: bold;
         }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 15px;
+        }
+        .tab-button {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-bottom: none;
+            padding: 8px 15px;
+            margin-right: 5px;
+            border-radius: 5px 5px 0 0;
+            cursor: pointer;
+        }
+        .tab-button.active {
+            background-color: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .estadisticas {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .estadistica-item {
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: white;
+        }
+        .estado-AUTORIZADO {
+            background-color: #198754;
+        }
+        .estado-RECIBIDO {
+            background-color: #0d6efd;
+        }
+        .estado-RECHAZADO {
+            background-color: #dc3545;
+        }
+        .estado-PENDIENTE {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .estado-ERROR {
+            background-color: #6c757d;
+        }
+        .comprobante-card {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        .comprobante-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .comprobante-estado {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: white;
+        }
+        .ticket-detail {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 10px;
+        }
+        .ticket-items {
+            margin-top: 10px;
+        }
+        .ticket-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+        .ticket-totals {
+            margin-top: 10px;
+            font-weight: bold;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -135,14 +234,95 @@
         <button id="test-button">Probar Conversión</button>
         <button id="test-firma-button">Probar Firma XML</button>
         <button id="test-loyverse-button">Cargar Facturas Loyverse</button>
+        <button id="ver-comprobantes-button">Ver Estado Comprobantes</button>
         
-        <div class="result" id="result">Los resultados aparecerán aquí...</div>
+        <div class="tabs" style="margin-top: 20px;">
+            <button class="tab-button active" data-tab="result-tab">Resultados</button>
+            <button class="tab-button" data-tab="comprobantes-tab">Comprobantes SRI</button>
+            <button class="tab-button" data-tab="tickets-tab">Tickets Detallados</button>
+        </div>
+        
+        <div class="tab-content active" id="result-tab">
+            <div class="result" id="result">Los resultados aparecerán aquí...</div>
+        </div>
+        
+        <div class="tab-content" id="comprobantes-tab">
+            <div class="filter-controls" style="margin-bottom: 15px;">
+                <label>Filtrar por estado:</label>
+                <select id="estado-filter">
+                    <option value="">Todos</option>
+                    <option value="AUTORIZADO">Autorizado</option>
+                    <option value="RECIBIDO">Recibido</option>
+                    <option value="RECHAZADO">Rechazado</option>
+                    <option value="PENDIENTE">Pendiente</option>
+                    <option value="ERROR">Error</option>
+                </select>
+                <button id="refresh-comprobantes">Actualizar</button>
+            </div>
+            <div class="estadisticas" id="estadisticas-comprobantes">
+                <!-- Estadísticas de comprobantes -->
+            </div>
+            <div class="result" id="comprobantes-result">
+                <!-- Lista de comprobantes -->
+            </div>
+        </div>
+        
+        <div class="tab-content" id="tickets-tab">
+            <div class="result" id="tickets-result">
+                <!-- Detalles de tickets -->
+            </div>
+        </div>
     </div>
 
     <script src="/formatReceiptForSRI.js"></script>
     <script>
         // Variables globales para almacenar datos
         let loyverseReceipts = [];
+        let comprobantes = [];
+        
+        // Funcionalidad de pestañas
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                // Desactivar todas las pestañas
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                // Activar la pestaña seleccionada
+                button.classList.add('active');
+                const tabId = button.getAttribute('data-tab');
+                document.getElementById(tabId).classList.add('active');
+                
+                // Cargar datos específicos si es necesario
+                if (tabId === 'comprobantes-tab' && document.getElementById('comprobantes-result').innerHTML === '') {
+                    cargarComprobantes();
+                }
+            });
+        });
+        
+        // Conectar el botón de ver comprobantes
+        document.getElementById('ver-comprobantes-button').addEventListener('click', function() {
+            // Activar la pestaña de comprobantes
+            document.querySelector('.tab-button[data-tab="comprobantes-tab"]').click();
+            
+            // Cargar los comprobantes
+            cargarComprobantes();
+        });
+        
+        // Conectar el botón de actualizar comprobantes
+        document.getElementById('refresh-comprobantes').addEventListener('click', function() {
+            const estado = document.getElementById('estado-filter').value;
+            cargarComprobantes(estado);
+        });
+        
+        // Conectar el selector de filtro de estado
+        document.getElementById('estado-filter').addEventListener('change', function() {
+            const estado = this.value;
+            cargarComprobantes(estado);
+        });
         
         document.getElementById('test-button').addEventListener('click', function() {
             const loyverseToken = document.getElementById('loyverse-token').value;
@@ -308,6 +488,107 @@
             if (loyverseReceipts && loyverseReceipts[index]) {
                 document.getElementById('receipt-data').value = JSON.stringify(loyverseReceipts[index], null, 2);
                 document.getElementById('result').innerHTML = `<span class="success">Factura ${loyverseReceipts[index].receipt_number} cargada en el editor</span>`;
+                
+                // También mostrar el detalle del ticket en la pestaña correspondiente
+                mostrarDetalleTicket(index);
+            }
+        }
+        
+        // Función para mostrar el detalle de un ticket
+        function mostrarDetalleTicket(index) {
+            if (loyverseReceipts && loyverseReceipts[index]) {
+                const receipt = loyverseReceipts[index];
+                const customer = receipt.customer ? receipt.customer.name : 'Consumidor Final';
+                const fecha = new Date(receipt.created_at).toLocaleString();
+                
+                // Extraer el total de diferentes ubicaciones posibles
+                let total = 0;
+                if (receipt.total_money && typeof receipt.total_money.gross_sales === 'number') {
+                    total = receipt.total_money.gross_sales;
+                } else if (receipt.total_money && typeof receipt.total_money.total === 'number') {
+                    total = receipt.total_money.total;
+                } else if (typeof receipt.total === 'number') {
+                    total = receipt.total;
+                } else if (typeof receipt.receipt_total === 'number') {
+                    total = receipt.receipt_total;
+                } else if (typeof receipt.total_amount === 'number') {
+                    total = receipt.total_amount;
+                }
+                
+                // Construir HTML para los items del ticket
+                let itemsHtml = '';
+                if (receipt.line_items && receipt.line_items.length > 0) {
+                    receipt.line_items.forEach(item => {
+                        const precio = typeof item.price === 'number' ? item.price.toFixed(2) : '0.00';
+                        const cantidad = item.quantity || 1;
+                        const subtotal = typeof item.net_total === 'number' ? item.net_total.toFixed(2) : (cantidad * parseFloat(precio)).toFixed(2);
+                        
+                        itemsHtml += `
+                            <div class="ticket-item">
+                                <div>${item.item_name} (${cantidad} x $${precio})</div>
+                                <div>$${subtotal}</div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    itemsHtml = '<p>No hay items disponibles</p>';
+                }
+                
+                // Construir HTML para los totales
+                let totalesHtml = '';
+                if (receipt.total_money) {
+                    const netSales = typeof receipt.total_money.net_sales === 'number' ? receipt.total_money.net_sales.toFixed(2) : '0.00';
+                    const discount = typeof receipt.total_money.discount === 'number' ? receipt.total_money.discount.toFixed(2) : '0.00';
+                    const grossSales = typeof receipt.total_money.gross_sales === 'number' ? receipt.total_money.gross_sales.toFixed(2) : '0.00';
+                    
+                    totalesHtml = `
+                        <div class="ticket-totals">
+                            <div>Subtotal: $${netSales}</div>
+                            <div>Descuento: $${discount}</div>
+                            <div>Total: $${grossSales}</div>
+                        </div>
+                    `;
+                } else {
+                    totalesHtml = `<div class="ticket-totals">Total: $${typeof total === 'number' ? total.toFixed(2) : '0.00'}</div>`;
+                }
+                
+                // Construir HTML para la información del cliente
+                let clienteHtml = '<p>Cliente: Consumidor Final</p>';
+                if (receipt.customer) {
+                    clienteHtml = `
+                        <div>
+                            <p><strong>Cliente:</strong> ${receipt.customer.name || 'Sin nombre'}</p>
+                            ${receipt.customer.customer_code ? `<p><strong>Identificación:</strong> ${receipt.customer.customer_code}</p>` : ''}
+                            ${receipt.customer.phone_number ? `<p><strong>Teléfono:</strong> ${receipt.customer.phone_number}</p>` : ''}
+                            ${receipt.customer.email ? `<p><strong>Email:</strong> ${receipt.customer.email}</p>` : ''}
+                            ${receipt.customer.address ? `<p><strong>Dirección:</strong> ${receipt.customer.address}</p>` : ''}
+                        </div>
+                    `;
+                }
+                
+                // Mostrar el detalle completo del ticket
+                const ticketHtml = `
+                    <div class="ticket-detail">
+                        <div class="ticket-header">
+                            <h3>Ticket #${receipt.receipt_number || 'Sin número'}</h3>
+                            <div>${fecha}</div>
+                        </div>
+                        ${clienteHtml}
+                        <div class="ticket-items">
+                            <h4>Items:</h4>
+                            ${itemsHtml}
+                        </div>
+                        ${totalesHtml}
+                        <div style="margin-top: 15px;">
+                            <button onclick="probarFirma(${index})">Probar Firma XML</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('tickets-result').innerHTML = ticketHtml;
+                
+                // Cambiar a la pestaña de tickets
+                document.querySelector('.tab-button[data-tab="tickets-tab"]').click();
             }
         }
         
@@ -340,6 +621,113 @@
                 } catch (error) {
                     document.getElementById('result').innerHTML = `<span class="error">Error al procesar la firma XML: ${error.message}</span>`;
                 }
+            }
+        }
+        
+        // Función para cargar y mostrar los comprobantes SRI
+        async function cargarComprobantes(estado = '') {
+            try {
+                // Mostrar mensaje de espera
+                document.getElementById('comprobantes-result').innerHTML = `<span>Cargando comprobantes...</span>`;
+                
+                // Construir URL con filtro de estado si se proporciona
+                let url = '/api/comprobantes';
+                if (estado) {
+                    url += `?estado=${estado}`;
+                }
+                
+                // Llamar al endpoint para obtener comprobantes
+                const response = await fetch(url, {
+                    method: 'GET'
+                });
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    document.getElementById('comprobantes-result').innerHTML = `<span class="error">Error al cargar comprobantes: ${result.error || 'Error desconocido'}</span>`;
+                    return;
+                }
+                
+                // Guardar los comprobantes en la variable global
+                comprobantes = result.comprobantes || [];
+                
+                // Mostrar estadísticas
+                let estadisticasHtml = '';
+                if (result.estadisticas) {
+                    Object.entries(result.estadisticas).forEach(([estado, cantidad]) => {
+                        if (cantidad > 0) {
+                            estadisticasHtml += `<div class="estadistica-item estado-${estado}">${estado}: ${cantidad}</div>`;
+                        }
+                    });
+                }
+                document.getElementById('estadisticas-comprobantes').innerHTML = estadisticasHtml || '<p>No hay estadísticas disponibles</p>';
+                
+                // Mostrar los comprobantes en formato de tarjetas
+                if (comprobantes.length === 0) {
+                    document.getElementById('comprobantes-result').innerHTML = '<p>No se encontraron comprobantes</p>';
+                    return;
+                }
+                
+                let comprobantesHtml = '';
+                comprobantes.forEach((comprobante, index) => {
+                    const fecha = new Date(comprobante.fecha).toLocaleString();
+                    
+                    comprobantesHtml += `
+                        <div class="comprobante-card">
+                            <div class="comprobante-header">
+                                <h3>Clave de Acceso: ${comprobante.claveAcceso}</h3>
+                                <div class="comprobante-estado estado-${comprobante.estado}">${comprobante.estado}</div>
+                            </div>
+                            <div>
+                                <p><strong>Fecha:</strong> ${fecha}</p>
+                                <p><strong>Archivo:</strong> ${comprobante.archivo}</p>
+                            </div>
+                            <div style="margin-top: 10px;">
+                                <button onclick="descargarComprobante('${comprobante.claveAcceso}')">Descargar XML</button>
+                                <button onclick="verDetalleComprobante(${index})">Ver Detalle</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('comprobantes-result').innerHTML = comprobantesHtml;
+                
+            } catch (error) {
+                document.getElementById('comprobantes-result').innerHTML = `<span class="error">Error al cargar comprobantes: ${error.message}</span>`;
+            }
+        }
+        
+        // Función para descargar un comprobante XML
+        function descargarComprobante(claveAcceso) {
+            window.open(`/api/comprobantes/download/${claveAcceso}`, '_blank');
+        }
+        
+        // Función para ver el detalle de un comprobante
+        function verDetalleComprobante(index) {
+            if (comprobantes && comprobantes[index]) {
+                const comprobante = comprobantes[index];
+                
+                // Aquí podrías hacer una llamada adicional para obtener más detalles del comprobante si es necesario
+                // Por ahora, mostraremos la información disponible
+                
+                document.getElementById('comprobantes-result').innerHTML = `
+                    <button onclick="cargarComprobantes(document.getElementById('estado-filter').value)" style="margin-bottom: 15px;">← Volver a la lista</button>
+                    <div class="comprobante-card">
+                        <div class="comprobante-header">
+                            <h3>Detalle del Comprobante</h3>
+                            <div class="comprobante-estado estado-${comprobante.estado}">${comprobante.estado}</div>
+                        </div>
+                        <div>
+                            <p><strong>Clave de Acceso:</strong> ${comprobante.claveAcceso}</p>
+                            <p><strong>Fecha:</strong> ${new Date(comprobante.fecha).toLocaleString()}</p>
+                            <p><strong>Archivo:</strong> ${comprobante.archivo}</p>
+                            <p><strong>Ruta:</strong> ${comprobante.ruta}</p>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <button onclick="descargarComprobante('${comprobante.claveAcceso}')">Descargar XML</button>
+                        </div>
+                    </div>
+                `;
             }
         }
     </script>
