@@ -655,11 +655,11 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // Firmar el documento
     try {
       console.log('Iniciando proceso de firma del XML...');
-      // Colocar la firma inmediatamente después de <infoFactura> como requiere el XSD del SRI
+      // Colocar la firma como Último hijo del nodo raíz <factura> como requiere el XSD del SRI
       sig.computeSignature(xmlString, {
         location: {
-          reference: "/*[local-name()='factura']/infoFactura",  // Selector XPath para infoFactura
-          action: "after"   // Insertar justo después de <infoFactura>
+          reference: "/*[local-name()='factura']",  // Selector XPath para el nodo raíz factura
+          action: "append"   // Agregar como Último hijo de <factura>
         },
         prefix: "ds"          // Usar prefijo ds: para la firma (<ds:Signature>)
       });
