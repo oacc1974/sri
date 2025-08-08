@@ -659,13 +659,24 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       const rootNodeName = doc.documentElement.nodeName;
       console.log(`Usando selector dinámico para el nodo raíz: /*[local-name()='${rootNodeName}']`);
       
+      // Asegurar que el documento XML tenga el namespace ds declarado en el nodo raíz
+      const rootNode = doc.documentElement;
+      if (!rootNode.hasAttribute('xmlns:ds')) {
+        rootNode.setAttribute('xmlns:ds', 'http://www.w3.org/2000/09/xmldsig#');
+        console.log('Agregado namespace xmlns:ds="http://www.w3.org/2000/09/xmldsig#" al nodo raíz');
+      }
+      
       // Colocar la firma como ÚLTIMO hijo del nodo raíz (factura, notaCredito, etc.) como requiere el XSD del SRI
       sig.computeSignature(xmlString, {
         location: {
           reference: `/*[local-name()='${rootNodeName}']`,  // Selector XPath dinámico para el nodo raíz
           action: "append"   // Agregar como Último hijo del nodo raíz
         },
-        prefix: "ds"          // Usar prefijo ds: para la firma (<ds:Signature>)
+        prefix: "ds",         // Usar prefijo ds: para la firma (<ds:Signature>)
+        attrs: {
+          'Id': 'Signature',
+          'xmlns:ds': 'http://www.w3.org/2000/09/xmldsig#'
+        }
       });
       console.log('XML firmado correctamente');
       
