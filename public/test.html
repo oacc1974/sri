@@ -54,6 +54,27 @@
                     </div>
                 </div>
                 
+                <!-- Nueva sección para prueba de firma XML -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Prueba de Firma XML</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="xmlInput" class="form-label">Contenido XML:</label>
+                            <textarea class="form-control" id="xmlInput" rows="10" placeholder="Ingrese el contenido XML a firmar"></textarea>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <button class="btn btn-secondary" id="cargarEjemploXml">Cargar XML de Ejemplo</button>
+                            <button class="btn btn-primary" id="firmarXml">
+                                <span class="spinner-border spinner-border-sm d-none" id="spinnerFirma" role="status" aria-hidden="true"></span>
+                                Firmar XML
+                            </button>
+                        </div>
+                        <div id="resultadoFirma" class="mt-3"></div>
+                    </div>
+                </div>
+                
                 <div class="card">
                     <div class="card-header">
                         <h5>Generar Factura de Prueba</h5>
@@ -142,6 +163,142 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // XML de ejemplo con estructura básica y atributo id="comprobante" (minúsculas como requiere SRI)
+            const xmlEjemplo = `<?xml version="1.0" encoding="UTF-8"?>
+<factura id="comprobante" version="1.0.0" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+    <infoTributaria>
+        <ambiente>1</ambiente>
+        <tipoEmision>1</tipoEmision>
+        <razonSocial>EMPRESA DE PRUEBA</razonSocial>
+        <nombreComercial>EMPRESA DE PRUEBA</nombreComercial>
+        <ruc>0000000000001</ruc>
+        <claveAcceso>0000000000000000000000000000000000000000000000000</claveAcceso>
+        <codDoc>01</codDoc>
+        <estab>001</estab>
+        <ptoEmi>001</ptoEmi>
+        <secuencial>000000001</secuencial>
+        <dirMatriz>DIRECCION MATRIZ</dirMatriz>
+    </infoTributaria>
+    <infoFactura>
+        <fechaEmision>01/01/2023</fechaEmision>
+        <dirEstablecimiento>DIRECCION ESTABLECIMIENTO</dirEstablecimiento>
+        <obligadoContabilidad>SI</obligadoContabilidad>
+        <tipoIdentificacionComprador>04</tipoIdentificacionComprador>
+        <razonSocialComprador>CONSUMIDOR FINAL</razonSocialComprador>
+        <identificacionComprador>9999999999999</identificacionComprador>
+        <totalSinImpuestos>10.00</totalSinImpuestos>
+        <totalDescuento>0.00</totalDescuento>
+        <totalConImpuestos>
+            <totalImpuesto>
+                <codigo>2</codigo>
+                <codigoPorcentaje>2</codigoPorcentaje>
+                <baseImponible>10.00</baseImponible>
+                <valor>1.20</valor>
+            </totalImpuesto>
+        </totalConImpuestos>
+        <propina>0.00</propina>
+        <importeTotal>11.20</importeTotal>
+        <moneda>DOLAR</moneda>
+        <pagos>
+            <pago>
+                <formaPago>01</formaPago>
+                <total>11.20</total>
+            </pago>
+        </pagos>
+    </infoFactura>
+    <detalles>
+        <detalle>
+            <codigoPrincipal>001</codigoPrincipal>
+            <descripcion>PRODUCTO DE PRUEBA</descripcion>
+            <cantidad>1</cantidad>
+            <precioUnitario>10.00</precioUnitario>
+            <descuento>0.00</descuento>
+            <precioTotalSinImpuesto>10.00</precioTotalSinImpuesto>
+            <impuestos>
+                <impuesto>
+                    <codigo>2</codigo>
+                    <codigoPorcentaje>2</codigoPorcentaje>
+                    <tarifa>12</tarifa>
+                    <baseImponible>10.00</baseImponible>
+                    <valor>1.20</valor>
+                </impuesto>
+            </impuestos>
+        </detalle>
+    </detalles>
+    <infoAdicional>
+        <campoAdicional nombre="Email">cliente@example.com</campoAdicional>
+        <campoAdicional nombre="Direccion">DIRECCION CLIENTE</campoAdicional>
+        <campoAdicional nombre="Telefono">0999999999</campoAdicional>
+    </infoAdicional>
+</factura>`;
+            
+            // Elementos para la sección de firma XML
+            const xmlInput = document.getElementById('xmlInput');
+            const cargarEjemploXmlBtn = document.getElementById('cargarEjemploXml');
+            const firmarXmlBtn = document.getElementById('firmarXml');
+            const resultadoFirma = document.getElementById('resultadoFirma');
+            const spinnerFirma = document.getElementById('spinnerFirma');
+            
+            // Cargar XML de ejemplo
+            cargarEjemploXmlBtn.addEventListener('click', function() {
+                xmlInput.value = xmlEjemplo;
+            });
+            
+            // Firmar XML
+            firmarXmlBtn.addEventListener('click', async function() {
+                const xml = xmlInput.value.trim();
+                if (!xml) {
+                    mostrarResultadoFirma('Por favor, ingrese el contenido XML a firmar.', 'alert-warning');
+                    return;
+                }
+                
+                try {
+                    // Mostrar spinner
+                    spinnerFirma.classList.remove('d-none');
+                    firmarXmlBtn.disabled = true;
+                    
+                    // Enviar XML al endpoint de firma
+                    const response = await fetch('/api/test/firma-xml', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ xmlContent: xml })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        mostrarResultadoFirma(data.message, 'alert-success', data.xmlFirmado);
+                    } else {
+                        mostrarResultadoFirma(`Error: ${data.message}`, 'alert-danger');
+                    }
+                } catch (error) {
+                    mostrarResultadoFirma(`Error: ${error.message}`, 'alert-danger');
+                } finally {
+                    // Ocultar spinner
+                    spinnerFirma.classList.add('d-none');
+                    firmarXmlBtn.disabled = false;
+                }
+            });
+            
+            // Función para mostrar resultados de firma
+            function mostrarResultadoFirma(mensaje, tipo, xmlFirmado = null) {
+                let html = `<div class="alert ${tipo}">${mensaje}</div>`;
+                
+                if (xmlFirmado) {
+                    html += `<div class="mt-3">
+                        <label class="form-label">XML Firmado:</label>
+                        <pre class="border p-2 bg-light" style="max-height: 300px; overflow-y: auto;">${xmlFirmado}</pre>
+                        <button class="btn btn-sm btn-secondary mt-2" onclick="navigator.clipboard.writeText(document.querySelector('#resultadoFirma pre').textContent).then(() => alert('XML copiado al portapapeles'))">
+                            Copiar XML
+                        </button>
+                    </div>`;
+                }
+                
+                resultadoFirma.innerHTML = html;
+            }
+            
             // Verificar certificado
             document.getElementById('verificarCertificado').addEventListener('click', async function() {
                 try {
