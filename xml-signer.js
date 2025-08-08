@@ -655,11 +655,15 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     // Firmar el documento
     try {
       console.log('Iniciando proceso de firma del XML...');
-      // Colocar la firma como Último hijo del nodo raíz <factura> como requiere el XSD del SRI
+      // Obtener el nombre del nodo raíz para hacer un selector dinámico
+      const rootNodeName = doc.documentElement.nodeName;
+      console.log(`Usando selector dinámico para el nodo raíz: /*[local-name()='${rootNodeName}']`);
+      
+      // Colocar la firma como ÚLTIMO hijo del nodo raíz (factura, notaCredito, etc.) como requiere el XSD del SRI
       sig.computeSignature(xmlString, {
         location: {
-          reference: "/*[local-name()='factura']",  // Selector XPath para el nodo raíz factura
-          action: "append"   // Agregar como Último hijo de <factura>
+          reference: `/*[local-name()='${rootNodeName}']`,  // Selector XPath dinámico para el nodo raíz
+          action: "append"   // Agregar como Último hijo del nodo raíz
         },
         prefix: "ds"          // Usar prefijo ds: para la firma (<ds:Signature>)
       });
