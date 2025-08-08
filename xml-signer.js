@@ -695,6 +695,42 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
         throw new Error(`El XML no cumple con la estructura requerida por el SRI: ${structError.message}`);
       }
       
+      // Verificar el orden de los nodos hijos según XSD SRI
+      console.log('Verificando y ajustando el orden de los nodos para cumplir XSD SRI...');
+      
+      // Obtener el documento XML como string para manipularlo antes de firmar
+      let xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
+      const rootElement = xmlDoc.documentElement;
+      
+      // Asegurar que los nodos estén en el orden correcto según XSD SRI:
+      // 1. infoTributaria
+      // 2. infoFactura
+      // 3. detalles
+      // 4. infoAdicional (opcional)
+      // 5. ds:Signature (será agregado al final)
+      
+      // Reorganizar nodos si es necesario
+      const infoTributaria = rootElement.getElementsByTagName('infoTributaria')[0];
+      const infoFactura = rootElement.getElementsByTagName('infoFactura')[0];
+      const detalles = rootElement.getElementsByTagName('detalles')[0];
+      const infoAdicional = rootElement.getElementsByTagName('infoAdicional')[0];
+      
+      // Remover todos los nodos principales para reordenarlos
+      if (infoTributaria) rootElement.removeChild(infoTributaria);
+      if (infoFactura) rootElement.removeChild(infoFactura);
+      if (detalles) rootElement.removeChild(detalles);
+      if (infoAdicional) rootElement.removeChild(infoAdicional);
+      
+      // Agregar en el orden correcto según XSD SRI
+      if (infoTributaria) rootElement.appendChild(infoTributaria);
+      if (infoFactura) rootElement.appendChild(infoFactura);
+      if (detalles) rootElement.appendChild(detalles);
+      if (infoAdicional) rootElement.appendChild(infoAdicional);
+      
+      // Convertir de nuevo a string con el orden correcto
+      xmlString = new XMLSerializer().serializeToString(xmlDoc);
+      console.log('XML reordenado correctamente según XSD SRI');
+      
       // Colocar la firma como ÚLTIMO hijo del nodo raíz (factura, notaCredito, etc.) como requiere el XSD del SRI
       console.log('Insertando firma como ÚLTIMO hijo del nodo raíz para cumplir XSD SRI');
       sig.computeSignature(xmlString, {

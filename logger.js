@@ -41,7 +41,8 @@ if (!fs.existsSync(LOG_DIR)) {
  * @returns {string} - Mensaje formateado
  */
 function formatLogMessage(level, message, data = null) {
-  const timestamp = moment().format('YYYY-MM-DD HH:mm:ss.SSS');
+  // Usar la zona horaria de Ecuador (UTC-5)
+  const timestamp = moment().utcOffset('-05:00').format('YYYY-MM-DD HH:mm:ss.SSS');
   let logMessage = `[${timestamp}] [${level}] ${message}`;
   
   if (data) {
@@ -78,7 +79,8 @@ function formatLogMessage(level, message, data = null) {
  */
 function writeToLogFile(level, message, data = null) {
   try {
-    const today = moment().format('YYYY-MM-DD');
+    // Usar la zona horaria de Ecuador (UTC-5) para el nombre del archivo
+    const today = moment().utcOffset('-05:00').format('YYYY-MM-DD');
     const logFile = path.join(LOG_DIR, `${today}.log`);
     
     const logMessage = formatLogMessage(level, message, data) + '\n';
@@ -200,7 +202,8 @@ function errorSRI(tipo, claveAcceso, error) {
  */
 function obtenerLogs(fecha = null, tipo = 'all') {
   try {
-    const day = fecha || moment().format('YYYY-MM-DD');
+    // Usar la zona horaria de Ecuador (UTC-5) para obtener los logs
+    const day = fecha || moment().utcOffset('-05:00').format('YYYY-MM-DD');
     let logFile;
     
     switch (tipo.toLowerCase()) {

@@ -191,7 +191,8 @@
                         telefono: document.getElementById('telefono').value
                     },
                     factura: {
-                        fechaEmision: new Date().toISOString().split('T')[0],
+                        // Usar la fecha actual de Ecuador (UTC-5)
+                        fechaEmision: new Date().toLocaleString('sv', { timeZone: 'America/Guayaquil' }).split(' ')[0],
                         secuencial: '000000001',
                         formaPago: '01',
                         importeTotal: parseFloat(document.getElementById('valorTotal').value) * 1.12,

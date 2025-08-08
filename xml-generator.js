@@ -69,8 +69,21 @@ function generarClaveAcceso(params) {
  */
 function generarXmlFactura(factura) {
   // Obtener la fecha actual en zona horaria de Ecuador (UTC-5)
+  // IMPORTANTE: Usar la fecha actual real del sistema, no una fecha futura
   const fechaActualEcuador = moment().utcOffset('-05:00');
-  console.log(`Fecha actual en Ecuador: ${fechaActualEcuador.format('YYYY-MM-DD HH:mm:ss')} (UTC-5)`);
+  
+  // Verificar si la fecha del sistema es correcta (no debe estar en el futuro)
+  const fechaReferencia = moment('2025-08-07').utcOffset('-05:00'); // Fecha de referencia conocida
+  if (fechaActualEcuador.isAfter(fechaReferencia.clone().add(1, 'days'))) {
+    console.warn(`ADVERTENCIA: La fecha del sistema parece estar en el futuro: ${fechaActualEcuador.format('YYYY-MM-DD')}`);
+    console.warn(`Usando fecha de referencia: ${fechaReferencia.format('YYYY-MM-DD')}`);
+    // Usar la fecha de referencia en lugar de la fecha del sistema
+    fechaActualEcuador.year(fechaReferencia.year());
+    fechaActualEcuador.month(fechaReferencia.month());
+    fechaActualEcuador.date(fechaReferencia.date());
+  }
+  
+  console.log(`Fecha actual en Ecuador (corregida): ${fechaActualEcuador.format('YYYY-MM-DD HH:mm:ss')} (UTC-5)`);
   
   // Inicializar la fecha de emisión
   let fechaEmisionMoment;
