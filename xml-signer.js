@@ -634,7 +634,7 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
     console.log(`Se agregó el atributo Id="comprobante" al nodo raíz ${rootNodeName} (con mayúscula inicial)`);
     
     // Actualizar el xmlString con el ID configurado
-    xmlString = new XMLSerializer().serializeToString(xmlDoc);
+    xmlString = new XMLSerializer().serializeToString(doc); // Usar doc en lugar de xmlDoc
     
     // Usar referencia por Id (con mayúscula inicial) para mayor compatibilidad con xml-crypto
     console.log('Configurando referencia por Id="comprobante" (con mayúscula inicial)');
@@ -758,7 +758,7 @@ async function signXml(xmlString, certificatePath, certificatePassword, isBase64
       if (infoAdicional) rootElement.appendChild(infoAdicional);
       
       // Convertir de nuevo a string con el orden correcto
-      xmlString = new XMLSerializer().serializeToString(xmlDoc);
+      xmlString = new XMLSerializer().serializeToString(rootElement.ownerDocument);
       console.log('XML reordenado correctamente según XSD SRI');
       
       // Colocar la firma como ÚLTIMO hijo del nodo raíz (factura, notaCredito, etc.) como requiere el XSD del SRI
