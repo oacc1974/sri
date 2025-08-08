@@ -68,17 +68,6 @@ function generarClaveAcceso(params) {
  * @returns {string} - XML de la factura
  */
 function generarXmlFactura(factura) {
-  // Generar clave de acceso
-  const claveAcceso = generarClaveAcceso({
-    fechaEmision: factura.fechaEmision,
-    tipoComprobante: '01', // 01: Factura
-    ruc: factura.ruc,
-    ambiente: factura.ambiente,
-    serie: `${factura.establecimiento}${factura.puntoEmision}`,
-    secuencial: factura.secuencial,
-    tipoEmision: factura.tipoEmision
-  });
-  
   // Formatear fecha en zona horaria de Ecuador (UTC-5)
   // Usar la fecha actual si no se proporciona una fecha de emisión o si está en el futuro
   let fechaEmisionMoment;
@@ -99,7 +88,23 @@ function generarXmlFactura(factura) {
   // Formatear fecha en formato DD/MM/YYYY como requiere el SRI
   const fechaEmision = fechaEmisionMoment.format('DD/MM/YYYY');
   
+  // Importante: Usar la misma fecha para la clave de acceso
+  // Esto asegura que la fecha en la clave coincida con la fecha de emisión
+  const fechaParaClave = fechaEmisionMoment.format('YYYY-MM-DD');
+  
   console.log(`Fecha de emisión generada: ${fechaEmision} (Ecuador UTC-5)`);
+  console.log(`Fecha para clave de acceso: ${fechaParaClave}`);
+  
+  // Generar clave de acceso con la misma fecha procesada
+  const claveAcceso = generarClaveAcceso({
+    fechaEmision: fechaParaClave,
+    tipoComprobante: '01', // 01: Factura
+    ruc: factura.ruc,
+    ambiente: factura.ambiente,
+    serie: `${factura.establecimiento}${factura.puntoEmision}`,
+    secuencial: factura.secuencial,
+    tipoEmision: factura.tipoEmision
+  });
   
   // Sanitizar textos para XML
   const razonSocial = sanitizarTextoXML(factura.razonSocial);
